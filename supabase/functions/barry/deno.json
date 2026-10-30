@@ -1,0 +1,4 @@
+// Barry edge function dependencies.
+"dependencies": {
+  "jsr:@supabase/supabase-js": "^2.45.0"
+}

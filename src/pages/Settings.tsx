@@ -1,0 +1,354 @@
+import { useEffect, useState } from 'react';
+import {
+  Cloud,
+  Download,
+  LogOut,
+  Pencil,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
+import Modal from '../components/Modal';
+import { isSupabaseConfigured } from '../lib/config';
+import { getSupabase } from '../lib/supabase';
+import { useAppStore } from '../lib/store';
+import type { Child } from '../lib/types';
+import { ageLabel, exportCSV, exportJSON } from '../lib/utils';
+import { initials } from '../components/ChildSwitcher';
+
+// ---------------------------------------------------------------------------
+// Sync / auth
+// ---------------------------------------------------------------------------
+
+function SignInModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const sb = getSupabase();
+    if (!sb || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { error } =
+        mode === 'signin'
+          ? await sb.auth.signInWithPassword({ email, password })
+          : await sb.auth.signUp({ email, password });
+      if (error) setError(error.message);
+      else onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open={open} title={mode === 'signin' ? 'Sign in' : 'Create account'} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <div className="flex gap-1.5">
+          {(['signin', 'signup'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium ring-1 ${
+                mode === m
+                  ? 'bg-brand-600 text-white ring-brand-600'
+                  : 'bg-white text-slate-600 ring-slate-200'
+              }`}
+            >
+              {m === 'signin' ? 'Sign in' : 'Sign up'}
+            </button>
+          ))}
+        </div>
+        <div>
+          <label className="label">Email</label>
+          <input type="email" className="field" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        </div>
+        <div>
+          <label className="label">Password</label>
+          <input type="password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <button type="submit" className="btn-primary w-full" disabled={busy}>
+          {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
+        </button>
+        <p className="text-center text-xs text-slate-400">
+          Signing in lets BabyApp sync across your devices and caregivers.
+        </p>
+      </form>
+    </Modal>
+  );
+}
+
+function SyncCard() {
+  const syncState = useAppStore((s) => s.syncState);
+  const syncError = useAppStore((s) => s.syncError);
+  const lastSyncAt = useAppStore((s) => s.lastSyncAt);
+  const sync = useAppStore((s) => s.sync);
+  const [signIn, setSignIn] = useState(false);
+  const [user, setUser] = useState<{ email?: string } | null>(null);
+
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!sb) return;
+    sb.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null));
+    const { data: sub } = sb.auth.onAuthStateChange((_e, session) =>
+      setUser(session?.user ?? null),
+    );
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (!isSupabaseConfigured) {
+    return (
+      <Card title="Sync" icon={<Cloud size={16} />}>
+        <p className="text-sm text-slate-500">
+          Running in <strong>local-only</strong> mode — data stays on this device. To sync
+          across devices and caregivers, set <code className="rounded bg-slate-100 px-1">VITE_SUPABASE_URL</code>{' '}
+          and <code className="rounded bg-slate-100 px-1">VITE_SUPABASE_ANON_KEY</code> and rebuild.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Sync" icon={<Cloud size={16} />}>
+      <div className="space-y-3">
+        {user ? (
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-slate-700">{user.email}</p>
+              <p className="text-xs text-slate-400">
+                {lastSyncAt ? `Last sync ${new Date(lastSyncAt).toLocaleTimeString()}` : 'Not synced yet'}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button className="btn-ghost px-3 py-2" onClick={() => void sync()} disabled={syncState === 'syncing'}>
+                <RefreshCw size={15} className={syncState === 'syncing' ? 'animate-spin' : ''} /> Sync
+              </button>
+              <button
+                className="btn-ghost px-3 py-2"
+                onClick={() => void getSupabase()!.auth.signOut()}
+                title="Sign out"
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="btn-primary w-full" onClick={() => setSignIn(true)}>
+            Sign in to sync
+          </button>
+        )}
+        {syncError && syncState === 'error' && (
+          <p className="rounded-lg bg-red-50 p-2 text-xs text-red-600">{syncError}</p>
+        )}
+      </div>
+      <SignInModal open={signIn} onClose={() => setSignIn(false)} />
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Child management
+// ---------------------------------------------------------------------------
+
+function EditChildModal({ child, onClose }: { child: Child | null; onClose: () => void }) {
+  const updateChild = useAppStore((s) => s.updateChild);
+  const [name, setName] = useState('');
+  const [birth_date, setBirthDate] = useState('');
+  const [birth_time, setBirthTime] = useState('');
+
+  useEffect(() => {
+    if (child) {
+      setName(child.name);
+      setBirthDate(child.birth_date);
+      setBirthTime(child.birth_time ?? '');
+    }
+  }, [child]);
+
+  if (!child) return null;
+  return (
+    <Modal open title="Edit child" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void updateChild({ ...child, name, birth_date, birth_time: birth_time || undefined });
+          onClose();
+        }}
+        className="space-y-3"
+      >
+        <div>
+          <label className="label">Name</label>
+          <input className="field" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Birth date</label>
+            <input type="date" className="field" value={birth_date} onChange={(e) => setBirthDate(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Time</label>
+            <input type="time" className="field" value={birth_time} onChange={(e) => setBirthTime(e.target.value)} />
+          </div>
+        </div>
+        <button type="submit" className="btn-primary w-full">Save</button>
+      </form>
+    </Modal>
+  );
+}
+
+function ChildrenCard() {
+  const children = useAppStore((s) => s.children);
+  const removeChild = useAppStore((s) => s.removeChild);
+  const [editing, setEditing] = useState<Child | null>(null);
+  const [deleting, setDeleting] = useState<Child | null>(null);
+  const live = children.filter((c) => !c.deleted);
+
+  return (
+    <Card title="Children" icon={<Pencil size={16} />}>
+      <div className="space-y-2">
+        {live.map((c) => (
+          <div key={c.id} className="flex items-center gap-3">
+            <span
+              className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white"
+              style={{ background: c.color ?? '#4f46e5' }}
+            >
+              {initials(c.name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-slate-700">{c.name}</p>
+              <p className="text-xs text-slate-400">{ageLabel(c.birth_date)}</p>
+            </div>
+            <button className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" onClick={() => setEditing(c)}>
+              <Pencil size={15} />
+            </button>
+            <button className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500" onClick={() => setDeleting(c)}>
+              <Trash2 size={15} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <EditChildModal child={editing} onClose={() => setEditing(null)} />
+      <Modal open={!!deleting} title="Delete child" onClose={() => setDeleting(null)}>
+        {deleting && (
+          <>
+            <p className="text-sm text-slate-600">
+              Delete <strong>{deleting.name}</strong> and all of their logged entries? This
+              removes them on this device{isSupabaseConfigured ? ' and from sync' : ''}.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button className="btn-ghost flex-1" onClick={() => setDeleting(null)}>Cancel</button>
+              <button
+                className="btn-danger flex-1"
+                onClick={() => {
+                  void removeChild(deleting.id);
+                  setDeleting(null);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Data (export / delete)
+// ---------------------------------------------------------------------------
+
+function DataCard() {
+  const children = useAppStore((s) => s.children);
+  const events = useAppStore((s) => s.events);
+  const activeId = useAppStore((s) => s.activeChildId);
+  const deleteAccount = useAppStore((s) => s.deleteAccount);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const child = children.find((c) => c.id === activeId && !c.deleted);
+  if (!child) return null;
+  const childEvents = events.filter((e) => e.child_id === child.id && !e.deleted);
+
+  return (
+    <Card title="Your data" icon={<Download size={16} />}>
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <button
+            className="btn-ghost flex-1"
+            onClick={() => exportJSON([child], childEvents, child.name)}
+          >
+            <Download size={15} /> Export JSON
+          </button>
+          <button
+            className="btn-ghost flex-1"
+            onClick={() => exportCSV([child], childEvents, child.name)}
+          >
+            <Download size={15} /> Export CSV
+          </button>
+        </div>
+        <button className="btn-danger w-full" onClick={() => setConfirmDelete(true)}>
+          <Trash2 size={15} /> Delete all my data
+        </button>
+      </div>
+
+      <Modal open={confirmDelete} title="Delete all data" onClose={() => setConfirmDelete(false)}>
+        <p className="text-sm text-slate-600">
+          This permanently deletes <strong>all</strong> children and entries
+          {isSupabaseConfigured ? ' on this device and from sync' : ' on this device'}. This
+          cannot be undone.
+        </p>
+        <div className="mt-4 flex gap-2">
+          <button className="btn-ghost flex-1" onClick={() => setConfirmDelete(false)}>Cancel</button>
+          <button
+            className="btn-danger flex-1"
+            onClick={() => {
+              setConfirmDelete(false);
+              void deleteAccount();
+            }}
+          >
+            Delete everything
+          </button>
+        </div>
+      </Modal>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Layout helper + page
+// ---------------------------------------------------------------------------
+
+function Card({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="card p-4">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+        <span className="text-brand-600">{icon}</span>
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+export default function Settings() {
+  return (
+    <div className="animate-fade-in space-y-4">
+      <h1 className="text-lg font-bold text-slate-800">Settings</h1>
+      <SyncCard />
+      <ChildrenCard />
+      <DataCard />
+      <Card title="About" icon={<Cloud size={16} />}>
+        <p className="text-xs leading-relaxed text-slate-500">
+          BabyApp is a care tracker — it records and organizes your baby's care. It is not a
+          medical device and does not provide medical advice. For anything health-related,
+          talk to your own doctor or a healthcare professional.
+        </p>
+      </Card>
+    </div>
+  );
+}
