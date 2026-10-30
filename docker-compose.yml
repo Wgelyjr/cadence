@@ -1,0 +1,41 @@
+# BabyApp — everything in one compose project:
+#   web      the PWA (built with the Supabase URL/key baked in)
+#   supabase the local Supabase stack (included, pinned to tag v1.26.08)
+#
+# Usage:
+#   make setup          first run: env, build, up, migrations
+#   docker compose up -d --build
+#   docker compose down
+#
+# Ports (override in .env): WEB_PORT (app, default 8088),
+# KONG_HTTP_PORT (API gateway, default 8000), POSTGRES_PORT (5432).
+
+name: babyapp
+
+include:
+  - ./docker/supabase/docker-compose.yml
+
+services:
+  web:
+    container_name: babyapp-web
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        # Baked into the browser bundle at build time. The anon key is a
+        # public credential (safe to expose); it must match the one in
+        # docker/supabase/.env — scripts/setup-docker.sh keeps them in sync.
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-http://localhost:8000}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-}
+    restart: unless-stopped
+    ports:
+      - ${WEB_PORT:-8088}:80
+    depends_on:
+      kong:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s

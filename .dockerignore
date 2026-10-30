@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+docker/supabase
+*.md
+.env
+.env.*
+supabase/.temp
+supabase/.branches

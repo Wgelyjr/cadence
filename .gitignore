@@ -29,3 +29,14 @@ npm-debug.log*
 # Supabase
 supabase/.temp/
 supabase/.branches/
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Docker local stack — generated at setup time
+docker/supabase/.env
+docker/supabase/volumes/db/data/
+docker/supabase/volumes/storage/*
+!docker/supabase/volumes/storage/.gitkeep
+# synced by scripts/sync-functions.sh from supabase/functions/
+docker/supabase/volumes/functions/barry/

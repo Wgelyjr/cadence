@@ -66,6 +66,68 @@ npm run build      # typecheck + build into dist/ (with sw.js)
 npm run preview    # serve the production build
 ```
 
+## Docker: full local stack & deploy
+
+One command brings up the PWA **and** a self-contained local Supabase
+(Postgres, Auth, PostgREST, Realtime, Storage, Edge Functions, Studio):
+
+```bash
+make setup         # or: bash scripts/setup-docker.sh
+```
+
+You get:
+
+| What         | Where |
+|--------------|-------|
+| BabyApp (installable PWA) | http://localhost:8088 |
+| Supabase Studio | http://localhost:8000/studio (user/password in `docker/supabase/.env`) |
+| API gateway (kong) | http://localhost:8000 |
+| Postgres (via pooler) | localhost:5432 (user `postgres`) |
+
+What `make setup` does:
+
+1. Generates `docker/supabase/.env` — fresh random secrets, and
+   `ANON_KEY` / `SERVICE_ROLE_KEY` JWTs signed with that random
+   `JWT_SECRET` (re-runnable: existing `.env` files are kept).
+2. Generates the root `.env` and points `VITE_SUPABASE_URL` /
+   `VITE_SUPABASE_ANON_KEY` at the local stack (never overwrites values
+   you set by hand).
+3. Syncs `supabase/functions/*` (Barry) into the edge-runtime volume.
+4. `docker compose up -d --build` — builds the web image with the local
+   URL + anon key baked in.
+5. Waits for Postgres, kong, Auth, the edge runtime, and the web app to
+   be healthy, then applies `supabase/migrations/*.sql` (idempotent — the
+   schema can't run at DB first-init because it references `auth.users`,
+   which the auth service creates at boot).
+
+Day to day:
+
+```bash
+make up            # (re)build + start
+make logs          # tail everything
+make ps            # status
+make migrate       # re-apply migrations (safe)
+make deploy-barry  # after changing Barry: sync + restart edge runtime
+make down          # stop (data kept in docker/supabase/volumes + volumes)
+make reset         # stop + destroy all local data
+```
+
+**Barry with Docker:** put your LLM endpoint in the root `.env`
+(uncomment the `BARRY_*` lines — any OpenAI-compatible endpoint works,
+including local Ollama/LM Studio/vLLM), then `make setup` again (or
+`make deploy-barry`). Without it, the app is fully usable and Barry shows
+an offline notice.
+
+**Deploying to a server:** the same compose project runs as-is — set
+`KONG_HTTP_PORT`, `WEB_PORT`, `SUPABASE_PUBLIC_URL`, `API_EXTERNAL_URL`
+and `SITE_URL` in `.env` / `docker/supabase/.env` to your domain, put a
+TLS-terminating reverse proxy (Caddy/nginx) in front, and run
+`docker compose up -d --build`. The Supabase stack is a pinned copy of
+the official self-hosted stack (tag `v1.26.08`) in `docker/supabase/`, so
+upgrades are a deliberate, reviewed change rather than a silent drift.
+
+**Hosted Supabase instead of Docker:** skip this section — see below.
+
 ## Connecting sync + Barry (Supabase)
 
 1. Create a project at [supabase.com](https://supabase.com) (or run
@@ -121,7 +183,17 @@ src/
 supabase/
   migrations/   0001_init.sql, 0002_barry_corpus.sql
   functions/barry/  RAG + streaming edge function (Deno)
-scripts/        generate-icons.mjs
+docker/
+  Dockerfile        web image (Vite build → nginx, SPA + PWA cache rules)
+  nginx/            nginx config (sw.js no-cache, hashed assets immutable)
+  supabase/         pinned self-hosted Supabase stack (tag v1.26.08)
+docker-compose.yml  root project: web + included supabase stack
+scripts/
+  generate-icons.mjs
+  setup-docker.sh     env generation, build, up, health waits, migrations
+  apply-migrations.sh (re)apply supabase/migrations (idempotent)
+  sync-functions.sh   supabase/functions/* → edge-runtime volume
+Makefile          make setup / up / down / logs / migrate / reset …
 ```
 
 ## Roadmap (beyond this pass)
