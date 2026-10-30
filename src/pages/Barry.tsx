@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bot, Send, User } from 'lucide-react';
+import Markdown from '../components/Markdown';
 import { askBarry } from '../lib/barry';
 import { isBarryAvailable } from '../lib/config';
 import { useAppStore } from '../lib/store';
@@ -123,9 +124,9 @@ export default function Barry() {
             className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap ${
+              className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm ${
                 m.role === 'user'
-                  ? 'bg-brand-600 text-white'
+                  ? 'whitespace-pre-wrap bg-brand-600 text-white'
                   : 'bg-white text-slate-700 shadow-card dark:bg-slate-800 dark:text-slate-200'
               }`}
             >
@@ -135,6 +136,8 @@ export default function Barry() {
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 dark:bg-slate-600 [animation-delay:-0.1s]" />
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 dark:bg-slate-600" />
                 </span>
+              ) : m.role === 'assistant' ? (
+                <Markdown content={m.content} />
               ) : (
                 m.content
               )}
