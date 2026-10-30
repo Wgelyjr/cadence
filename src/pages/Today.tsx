@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { startOfDay } from 'date-fns';
 import { Plus } from 'lucide-react';
+import EditEventModal from '../components/EditEventModal';
 import EventCard from '../components/EventCard';
 import SummaryStats from '../components/SummaryStats';
 import SweetSpotCard from '../components/SweetSpotCard';
 import { useAppStore } from '../lib/store';
+import type { CareEvent } from '../lib/types';
 
 interface Props {
   goToLog: () => void;
@@ -13,6 +16,7 @@ export default function Today({ goToLog }: Props) {
   const events = useAppStore((s) => s.events);
   const activeId = useAppStore((s) => s.activeChildId);
   const removeEvent = useAppStore((s) => s.removeEvent);
+  const [editing, setEditing] = useState<CareEvent | null>(null);
 
   const start = startOfDay(new Date());
   const today = events
@@ -38,10 +42,14 @@ export default function Today({ goToLog }: Props) {
               Nothing logged yet today.
             </p>
           ) : (
-            today.map((e) => <EventCard key={e.id} event={e} onDelete={removeEvent} />)
+            today.map((e) => (
+              <EventCard key={e.id} event={e} onDelete={removeEvent} onEdit={setEditing} />
+            ))
           )}
         </div>
       </section>
+
+      <EditEventModal event={editing} onClose={() => setEditing(null)} />
     </div>
   );
 }

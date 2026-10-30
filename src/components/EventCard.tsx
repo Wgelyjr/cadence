@@ -1,5 +1,5 @@
 import { format } from 'date-fns';
-import { Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import type { CareEvent } from '../lib/types';
 import { EVENT_TYPE_META } from '../lib/types';
 import type { Units } from '../lib/settings';
@@ -78,9 +78,10 @@ export function eventSummary(e: CareEvent, units: Units): string {
 interface Props {
   event: CareEvent;
   onDelete?: (id: string) => void;
+  onEdit?: (event: CareEvent) => void;
 }
 
-export default function EventCard({ event, onDelete }: Props) {
+export default function EventCard({ event, onDelete, onEdit }: Props) {
   const units = useSettings((s) => s.units);
   return (
     <div className="flex items-center gap-3 rounded-xl bg-white p-3 shadow-card dark:bg-slate-900">
@@ -102,6 +103,15 @@ export default function EventCard({ event, onDelete }: Props) {
           <p className="truncate text-xs text-slate-500 dark:text-slate-400">{event.note}</p>
         )}
       </div>
+      {onEdit && (
+        <button
+          onClick={() => onEdit(event)}
+          className="shrink-0 rounded-lg p-1.5 text-slate-300 hover:bg-brand-50 hover:text-brand-600 dark:text-slate-600 dark:hover:bg-brand-950/60 dark:hover:text-brand-400"
+          aria-label="Edit entry"
+        >
+          <Pencil size={16} />
+        </button>
+      )}
       {onDelete && (
         <button
           onClick={() => onDelete(event.id)}

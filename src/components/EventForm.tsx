@@ -18,6 +18,9 @@ import { BUILTIN_EVENT_TYPES, EVENT_TYPE_META } from '../lib/types';
 import { useAppStore } from '../lib/store';
 import { useSettings, visiblePickerIds } from '../lib/settings';
 import {
+  CM_PER_IN,
+  KG_PER_LB,
+  ML_PER_OZ,
   lengthToCm,
   lengthUnit,
   round1,
@@ -29,6 +32,7 @@ import {
   weightToKg,
   weightUnit,
 } from '../lib/units';
+import type { Units } from '../lib/settings';
 import Seg from './Seg';
 
 const ICONS: Record<BuiltinEventType, typeof Moon> = {
@@ -114,13 +118,65 @@ function defaultForm(): FormState {
   };
 }
 
+/** Type-specific fields, so an edit can clear values the new type doesn't use. */
+const TYPE_FIELDS: Record<EventType, Array<keyof CareEvent>> = {
+  sleep: ['sleep_kind'],
+  feed: ['feed_method', 'feed_side', 'feed_side_duration_min', 'bottle_ml', 'pump_ml'],
+  diaper: ['diaper_type', 'stool_color', 'stool_consistency'],
+  growth: ['height_cm', 'weight_kg', 'head_cm'],
+  health: ['temp_c', 'medicine_name', 'medicine_dose'],
+  milestone: ['label'],
+  solid_food: ['food_items'],
+  allergy: ['label', 'allergy_reaction', 'allergy_severity'],
+  contraction: ['contraction_duration_sec', 'label'],
+  custom: ['custom_type_id', 'custom_label'],
+};
+
+/** Prefill the form from an existing event, in the user's display units. */
+function formFromEvent(e: CareEvent, units: Units): FormState {
+  const f = defaultForm();
+  const vol = (ml: number) => (units === 'metric' ? ml : round1(ml / ML_PER_OZ));
+  const len = (cm: number) => (units === 'metric' ? cm : round1(cm / CM_PER_IN));
+  const wgt = (kg: number) => (units === 'metric' ? kg : round1(kg / KG_PER_LB));
+  const tmp = (c: number) => (units === 'metric' ? c : round1(c * (9 / 5) + 32));
+  f.start_time = toLocalInput(new Date(e.start_time));
+  f.end_time = e.end_time ? toLocalInput(new Date(e.end_time)) : '';
+  if (e.sleep_kind) f.sleep_kind = e.sleep_kind;
+  if (e.feed_method) f.feed_method = e.feed_method;
+  if (e.feed_side) f.feed_side = e.feed_side;
+  if (e.feed_side_duration_min != null) f.feed_side_duration_min = String(e.feed_side_duration_min);
+  if (e.bottle_ml != null) f.bottle_ml = String(vol(e.bottle_ml));
+  if (e.pump_ml != null) f.pump_ml = String(vol(e.pump_ml));
+  if (e.diaper_type) f.diaper_type = e.diaper_type;
+  if (e.stool_color) f.stool_color = e.stool_color;
+  if (e.stool_consistency) f.stool_consistency = e.stool_consistency;
+  if (e.height_cm != null) f.height_cm = String(len(e.height_cm));
+  if (e.weight_kg != null) f.weight_kg = String(wgt(e.weight_kg));
+  if (e.head_cm != null) f.head_cm = String(len(e.head_cm));
+  if (e.temp_c != null) f.temp_c = String(tmp(e.temp_c));
+  if (e.medicine_name) f.medicine_name = e.medicine_name;
+  if (e.medicine_dose) f.medicine_dose = e.medicine_dose;
+  if (e.label) f.label = e.label;
+  if (e.food_items?.length) f.food_items = e.food_items.join(', ');
+  if (e.allergy_reaction) f.allergy_reaction = e.allergy_reaction;
+  if (e.allergy_severity) f.allergy_severity = e.allergy_severity;
+  if (e.contraction_duration_sec != null)
+    f.contraction_duration_sec = String(e.contraction_duration_sec);
+  if (e.note) f.note = e.note;
+  return f;
+}
+
 interface Props {
+  /** When set, the form edits this event instead of creating a new one. */
+  initial?: CareEvent;
   onSaved?: () => void;
 }
 
-export default function EventForm({ onSaved }: Props) {
+export default function EventForm({ initial, onSaved }: Props) {
   const activeChildId = useAppStore((s) => s.activeChildId);
   const addEvent = useAppStore((s) => s.addEvent);
+  const updateEvent = useAppStore((s) => s.updateEvent);
+  const childId = initial ? initial.child_id : activeChildId;
 
   const units = useSettings((s) => s.units);
   const customTypes = useSettings((s) => s.customTypes);
@@ -137,8 +193,16 @@ export default function EventForm({ onSaved }: Props) {
     [customTypes],
   );
 
-  const [selected, setSelected] = useState<string>(pickerIds[0] ?? 'sleep');
-  const [form, setForm] = useState<FormState>(defaultForm);
+  const [selected, setSelected] = useState<string>(() =>
+    initial
+      ? initial.type === 'custom'
+        ? initial.custom_type_id ?? ''
+        : initial.type
+      : pickerIds[0] ?? 'sleep',
+  );
+  const [form, setForm] = useState<FormState>(() =>
+    initial ? formFromEvent(initial, units) : defaultForm(),
+  );
   const [busy, setBusy] = useState(false);
   const [timerStart, setTimerStart] = useState<number | null>(null);
   const [, setTick] = useState(0);
@@ -180,12 +244,17 @@ export default function EventForm({ onSaved }: Props) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!activeChildId || busy) return;
+    if (!childId || busy) return;
     setBusy(true);
     try {
+      // A custom event whose type was later removed from settings keeps its
+      // type (and denormalized label) unless the user picks a built-in type.
+      const keptRemovedCustom =
+        initial?.type === 'custom' &&
+        !BUILTIN_EVENT_TYPES.includes(selected as BuiltinEventType);
       const input: Partial<CareEvent> & { type: EventType; child_id: string } = {
-        type: selectedCustom ? 'custom' : (selected as EventType),
-        child_id: activeChildId,
+        type: selectedCustom || keptRemovedCustom ? 'custom' : (selected as EventType),
+        child_id: childId,
         start_time: fromLocalInput(form.start_time || toLocalInput(new Date())),
       };
       if (form.end_time) input.end_time = fromLocalInput(form.end_time);
@@ -250,10 +319,25 @@ export default function EventForm({ onSaved }: Props) {
       if (selectedCustom) {
         input.custom_type_id = selectedCustom.id;
         input.custom_label = selectedCustom.label;
+      } else if (keptRemovedCustom) {
+        input.custom_type_id = initial!.custom_type_id;
+        input.custom_label = initial!.custom_label;
       }
       if (form.note) input.note = form.note;
 
-      await addEvent(input);
+      if (initial) {
+        // Rebuild the event from the form so type changes and cleared fields
+        // don't leave stale values behind.
+        const updated = { ...initial };
+        for (const keys of Object.values(TYPE_FIELDS))
+          for (const k of keys) delete (updated as Record<string, unknown>)[k];
+        if (!form.end_time && input.type !== 'contraction') delete updated.end_time;
+        if (!form.note) delete updated.note;
+        Object.assign(updated, input);
+        await updateEvent(updated);
+      } else {
+        await addEvent(input);
+      }
       setForm(defaultForm());
       setTimerStart(null);
       onSaved?.();
@@ -656,8 +740,8 @@ export default function EventForm({ onSaved }: Props) {
         </div>
       )}
 
-      <button type="submit" className="btn-primary w-full" disabled={busy || !activeChildId}>
-        <Save size={16} /> {busy ? 'Saving…' : 'Save entry'}
+      <button type="submit" className="btn-primary w-full" disabled={busy || !childId}>
+        <Save size={16} /> {busy ? 'Saving…' : initial ? 'Save changes' : 'Save entry'}
       </button>
     </form>
   );

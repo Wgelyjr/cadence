@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { format } from 'date-fns';
+import EditEventModal from '../components/EditEventModal';
 import EventCard from '../components/EventCard';
 import { useAppStore } from '../lib/store';
 import type { CareEvent } from '../lib/types';
@@ -7,6 +9,7 @@ export default function Timeline() {
   const events = useAppStore((s) => s.events);
   const activeId = useAppStore((s) => s.activeChildId);
   const removeEvent = useAppStore((s) => s.removeEvent);
+  const [editing, setEditing] = useState<CareEvent | null>(null);
 
   const mine = events
     .filter((e) => e.child_id === activeId && !e.deleted)
@@ -40,11 +43,13 @@ export default function Timeline() {
           </h2>
           <div className="space-y-2">
             {g.items.map((e) => (
-              <EventCard key={e.id} event={e} onDelete={removeEvent} />
+              <EventCard key={e.id} event={e} onDelete={removeEvent} onEdit={setEditing} />
             ))}
           </div>
         </section>
       ))}
+
+      <EditEventModal event={editing} onClose={() => setEditing(null)} />
     </div>
   );
 }
