@@ -92,6 +92,7 @@ What `make setup` does:
 2. Generates the root `.env` and points `VITE_SUPABASE_URL` /
    `VITE_SUPABASE_ANON_KEY` at the local stack (never overwrites values
    you set by hand).
+2b. Syncs the env files (`scripts/sync-env.sh`) — see below.
 3. Syncs `supabase/functions/*` (Barry) into the edge-runtime volume.
 4. `docker compose up -d --build` — builds the web image with the local
    URL + anon key baked in.
@@ -117,6 +118,39 @@ make reset         # stop + destroy all local data
 including local Ollama/LM Studio/vLLM), then `make setup` again (or
 `make deploy-barry`). Without it, the app is fully usable and Barry shows
 an offline notice.
+
+**How the env files work:** Docker Compose interpolates `${VAR}` from the
+**project root's `.env` only** — it does not read `docker/supabase/.env`.
+So the setup script generates the stack secrets into
+`docker/supabase/.env` (which also keeps the pinned stack runnable
+standalone from its own directory) and mirrors every stack variable into a
+managed block at the end of the root `.env`. Your BARRY_* values go the
+other way (root → stack file). `scripts/sync-env.sh` re-does this on every
+`make setup` / `make up`, which is why the make targets are the supported
+entry points — a bare `docker compose up` works too, as long as a setup or
+`make up` ran first. Don't edit the managed block in the root `.env` (it
+is overwritten); edit `docker/supabase/.env` and re-run `make up`.
+
+**Troubleshooting:**
+
+- *Many services fail at start (postgres "password is not specified",
+  postgrest/realtime/supavisor crash-loop, kong never healthy):* the stack
+  was started before `make setup` generated the `.env` files, so every
+  secret was blank. Fix: if the database was already initialized with
+  those blank secrets, `make reset` (destroys local data) and then
+  `make setup`.
+- *"port is already allocated":* something else uses 8000/8443/5432/6543/8088.
+  Change `KONG_HTTP_PORT` / `KONG_HTTPS_PORT` / `POSTGRES_PORT` /
+  `POOLER_PROXY_PORT_TRANSACTION` / `WEB_PORT` in the root `.env`, then
+  `make setup` + `make up`.
+- *"The container name /supabase-… is already in use":* leftovers from
+  another compose project. `docker rm -f $(docker ps -aq --filter "label=com.docker.compose.project=babyapp")`,
+  or just `make reset`.
+- *Services crash-loop with OOM kills:* the full stack wants ~4–6 GB of
+  RAM. Raise the Docker daemon's memory limit (Docker Desktop: Settings →
+  Resources).
+- *Studio asks for a password:* user/password are in
+  `docker/supabase/.env` (`DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD`).
 
 **Deploying to a server:** the same compose project runs as-is — set
 `KONG_HTTP_PORT`, `WEB_PORT`, `SUPABASE_PUBLIC_URL`, `API_EXTERNAL_URL`

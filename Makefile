@@ -13,7 +13,8 @@ help: ## Show this help
 setup: ## One-shot setup: env, functions sync, build, up, wait, migrate
 	bash scripts/setup-docker.sh
 
-up: ## Build (if needed) and start everything
+up: ## Build (if needed) and start everything (syncs .env first)
+	bash scripts/sync-env.sh
 	docker compose up -d --build
 
 down: ## Stop everything (data is kept)
@@ -38,6 +39,7 @@ sync-functions: ## Copy supabase/functions/* into the docker edge-runtime volume
 	bash scripts/sync-functions.sh
 
 deploy-barry: sync-functions ## Sync functions and restart the edge runtime
+	bash scripts/sync-env.sh
 	docker compose up -d functions
 
 studio: ## Open the Supabase Studio dashboard URL in your browser

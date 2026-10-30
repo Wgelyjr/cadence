@@ -4,8 +4,13 @@
 #
 # Usage:
 #   make setup          first run: env, build, up, migrations
-#   docker compose up -d --build
-#   docker compose down
+#   make up             day to day (syncs .env, then docker compose up -d --build)
+#   make down           stop everything (data is kept)
+#
+# Note: compose interpolates ${VAR} from the ROOT .env only —
+# scripts/sync-env.sh keeps the stack variables (generated into
+# docker/supabase/.env) mirrored into it. Use the make targets so the
+# sync always runs.
 #
 # Ports (override in .env): WEB_PORT (app, default 8088),
 # KONG_HTTP_PORT (API gateway, default 8000), POSTGRES_PORT (5432).
