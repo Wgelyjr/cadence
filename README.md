@@ -80,7 +80,7 @@ You get:
 | What         | Where |
 |--------------|-------|
 | BabyApp (installable PWA) | http://localhost:8088 |
-| Supabase Studio | http://localhost:8000/studio (user/password in `docker/supabase/.env`) |
+| Supabase Studio | http://localhost:8000 (user/password in `docker/supabase/.env`) |
 | API gateway (kong) | http://localhost:8000 |
 | Postgres (via pooler) | localhost:5432 (user `postgres`) |
 
@@ -154,11 +154,12 @@ is overwritten); edit `docker/supabase/.env` and re-run `make up`.
 
 **Deploying to a server:** the same compose project runs as-is — set
 `KONG_HTTP_PORT`, `WEB_PORT`, `SUPABASE_PUBLIC_URL`, `API_EXTERNAL_URL`
-and `SITE_URL` in `.env` / `docker/supabase/.env` to your domain, put a
-TLS-terminating reverse proxy (Caddy/nginx) in front, and run
-`docker compose up -d --build`. The Supabase stack is a pinned copy of
-the official self-hosted stack (tag `v1.26.08`) in `docker/supabase/`, so
-upgrades are a deliberate, reviewed change rather than a silent drift.
+and `SITE_URL` in `docker/supabase/.env` (then re-run `make setup` or
+`make up` to propagate them), put a TLS-terminating reverse proxy
+(Caddy/nginx) in front, and run `make up`. The Supabase stack is a pinned
+copy of the official self-hosted stack (tag `v1.26.08`) in
+`docker/supabase/`, so upgrades are a deliberate, reviewed change rather
+than a silent drift.
 
 **Hosted Supabase instead of Docker:** skip this section — see below.
 

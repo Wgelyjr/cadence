@@ -203,10 +203,12 @@ wait_container() { # container label [max-seconds]
   fail "timed out waiting for $label (last status: $status)"
 }
 
-wait_url() { # url label
-  local url=$1 label=$2 i
+wait_url() { # url label [extra curl -H header]
+  local url=$1 label=$2 header=${3:-} i
+  local curl_args=(-sf -o /dev/null)
+  [ -n "$header" ] && curl_args+=(-H "$header")
   for i in $(seq 1 60); do
-    if curl -sf -o /dev/null "$url"; then
+    if curl "${curl_args[@]}" "$url"; then
       ok "$label is up"
       return 0
     fi
@@ -217,7 +219,9 @@ wait_url() { # url label
 
 wait_container supabase-db "Postgres" 180 && ok "Postgres is up"
 wait_container supabase-kong "API gateway (kong)" 240 && ok "kong is up"
-wait_url "http://localhost:$KONG_HTTP_PORT/auth/v1/health" "Auth"
+# kong's /auth/v1 route requires an apikey (key-auth plugin); gotrue's
+# own /health is open, but we reach it through the gateway with the anon key.
+wait_url "http://localhost:$KONG_HTTP_PORT/auth/v1/health" "Auth" "apikey: $(read_sbu ANON_KEY)"
 wait_container supabase-edge-functions "Edge functions" 180
 wait_url "http://localhost:$KONG_HTTP_PORT/functions/v1/hello" "Edge runtime (hello function)"
 wait_container babyapp-web "Web app" 300
@@ -236,7 +240,7 @@ DASH_USER=$(read_sbu DASHBOARD_USERNAME)
 info "all set"
 cat <<EOF
   App:        http://localhost:$WEB_PORT   (installable PWA)
-  Studio:     http://localhost:$KONG_HTTP_PORT/studio   ($DASH_USER / see docker/supabase/.env → DASHBOARD_PASSWORD)
+  Studio:     http://localhost:$KONG_HTTP_PORT   ($DASH_USER / see docker/supabase/.env → DASHBOARD_PASSWORD)
   API:        http://localhost:$KONG_HTTP_PORT
   Postgres:   localhost:${POSTGRES_PORT:-5432}  (user: postgres)
   Barry:      configured when BARRY_BASE_URL + BARRY_API_KEY are set in .env

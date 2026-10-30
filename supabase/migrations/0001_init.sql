@@ -314,24 +314,30 @@ alter table public.children enable row level security;
 alter table public.care_events enable row level security;
 
 -- Members can see their group(s).
+drop policy if exists "members read group" on public.care_groups;
 create policy "members read group" on public.care_groups
   for select using (public.in_group(auth.uid(), id));
 
 -- Members manage membership only through app functions; direct reads for own rows.
+drop policy if exists "members read membership" on public.group_members;
 create policy "members read membership" on public.group_members
   for select using (user_id = auth.uid());
 
 -- Children & events: visible + writable iff the caller is a member of the row's group.
+drop policy if exists "children read" on public.children;
 create policy "children read" on public.children
   for select using (public.in_group(auth.uid(), care_group_id));
 
+drop policy if exists "children write" on public.children;
 create policy "children write" on public.children
   for all using (public.in_group(auth.uid(), care_group_id))
   with check (public.in_group(auth.uid(), care_group_id));
 
+drop policy if exists "events read" on public.care_events;
 create policy "events read" on public.care_events
   for select using (public.in_group(auth.uid(), care_group_id));
 
+drop policy if exists "events write" on public.care_events;
 create policy "events write" on public.care_events
   for all using (public.in_group(auth.uid(), care_group_id))
   with check (public.in_group(auth.uid(), care_group_id));
