@@ -69,12 +69,18 @@ export const useAppStore = create<AppState>()((set, get) => {
 
     init: async () => {
       if (get().ready) return;
-      const { children, events } = await db.dbLoadAll();
+      const { children, events, childMap } = await db.dbLoadAll();
       let activeChildId = localStorage.getItem('babyapp:activeChild');
+      // If the selected child's id was reassigned by the legacy-id migration,
+      // follow it to the new id.
+      if (activeChildId && childMap.has(activeChildId)) {
+        activeChildId = childMap.get(activeChildId)!;
+      }
       const live = children.filter((c) => !c.deleted);
       if (!activeChildId || !live.some((c) => c.id === activeChildId)) {
         activeChildId = live[0]?.id ?? null;
       }
+      if (activeChildId) localStorage.setItem('babyapp:activeChild', activeChildId);
       set({
         children,
         events,

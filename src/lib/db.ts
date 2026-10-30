@@ -1,5 +1,6 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { Child, CareEvent } from './types';
+import { uid } from './utils';
 
 /**
  * Local-first persistence. IndexedDB is the source of truth on-device; the
@@ -26,13 +27,76 @@ export function getDB(): Promise<IDBPDatabase> {
   return dbPromise;
 }
 
-export async function dbLoadAll(): Promise<{ children: Child[]; events: CareEvent[] }> {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (s: string) => UUID_RE.test(s);
+
+/**
+ * One-time repair for rows created before `uid()` guaranteed a valid UUID.
+ *
+ * In non-secure contexts (plain HTTP, e.g. the app on a LAN IP) the old
+ * `uid()` fell back to `id-<ts>-<rand>`, which Postgres rejects as a `uuid`.
+ * Any such child/event is reassigned a valid v4 UUID, and every event's
+ * `child_id` is rewritten to follow its child. Runs on every load but is a
+ * no-op once everything is already a UUID.
+ */
+async function migrateLegacyIds(
+  children: Child[],
+  events: CareEvent[],
+): Promise<{
+  children: Child[];
+  events: CareEvent[];
+  changed: boolean;
+  childMap: Map<string, string>;
+}> {
+  const childMap = new Map<string, string>();
+  for (const c of children) if (!isUuid(c.id)) childMap.set(c.id, uid());
+
+  const newChildren = children.map((c) => {
+    const id = childMap.get(c.id) ?? c.id;
+    return id === c.id ? c : { ...c, id };
+  });
+
+  let changed = childMap.size > 0;
+  const oldEventIds: string[] = [];
+  const newEvents = events.map((e) => {
+    let next = e;
+    const childId = childMap.get(e.child_id);
+    if (childId && childId !== e.child_id) {
+      next = { ...next, child_id: childId };
+      changed = true;
+    }
+    if (!isUuid(next.id)) {
+      oldEventIds.push(next.id);
+      next = { ...next, id: uid() };
+      changed = true;
+    }
+    return next;
+  });
+
+  if (changed) {
+    // Put the re-keyed rows, then delete the old keys — IndexedDB `put` does
+    // not move a record, so the legacy rows must be removed explicitly.
+    const db = await getDB();
+    for (const c of newChildren) await db.put('children', c);
+    for (const e of newEvents) await db.put('events', e);
+    for (const oldId of childMap.keys()) await db.delete('children', oldId);
+    for (const oldId of oldEventIds) await db.delete('events', oldId);
+  }
+  return { children: newChildren, events: newEvents, changed, childMap };
+}
+
+export async function dbLoadAll(): Promise<{
+  children: Child[];
+  events: CareEvent[];
+  childMap: Map<string, string>;
+}> {
   const db = await getDB();
   const [children, events] = await Promise.all([db.getAll('children'), db.getAll('events')]);
-  return {
-    children: (children as Child[]) ?? [],
-    events: (events as CareEvent[]) ?? [],
-  };
+  const { children: c, events: e, childMap } = await migrateLegacyIds(
+    (children as Child[]) ?? [],
+    (events as CareEvent[]) ?? [],
+  );
+  return { children: c, events: e, childMap };
 }
 
 export async function dbPutChild(child: Child): Promise<void> {

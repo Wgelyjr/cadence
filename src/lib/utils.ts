@@ -1,10 +1,29 @@
 import { differenceInDays, differenceInWeeks, parseISO } from 'date-fns';
 import type { CareEvent, Child } from './types';
 
-export const uid = (): string =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+/**
+ * A unique id that is always a valid RFC 4122 v4 UUID.
+ *
+ * crypto.randomUUID only exists in secure contexts (HTTPS or localhost).
+ * Over plain HTTP — e.g. the app served on a LAN IP — it is undefined, and
+ * the old `id-<ts>-<rand>` fallback is not a valid Postgres `uuid`, which
+ * broke sync. crypto.getRandomValues works everywhere, so we build the UUID
+ * from it instead.
+ */
+export const uid = (): string => {
+  if (typeof crypto !== 'undefined') {
+    if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+    if (typeof crypto.getRandomValues === 'function') {
+      const b = crypto.getRandomValues(new Uint8Array(16));
+      b[6] = (b[6] & 0x0f) | 0x40; // version 4
+      b[8] = (b[8] & 0x3f) | 0x80; // variant 10
+      const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+      return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+    }
+  }
+  // Very old browsers only — not a valid UUID, but at least unique.
+  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
 
 export const nowIso = () => new Date().toISOString();
 
