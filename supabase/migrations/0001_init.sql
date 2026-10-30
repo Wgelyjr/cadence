@@ -254,13 +254,13 @@ begin
       (r->>'head_cm')::numeric, (r->>'temp_c')::numeric,
       r->>'medicine_name', r->>'medicine_dose',
       r->>'label',
-      case when r ? 'food_items' then
+      case when jsonb_typeof(r->'food_items') = 'array' then
         coalesce((select array_agg(x) from jsonb_array_elements_text(r->'food_items') x), '{}'::text[])
       else null end,
       r->>'allergy_reaction', r->>'allergy_severity',
       (r->>'contraction_duration_sec')::int,
       r->>'note',
-      case when r ? 'photos' then
+      case when jsonb_typeof(r->'photos') = 'array' then
         coalesce((select array_agg(x) from jsonb_array_elements_text(r->'photos') x), '{}'::text[])
       else null end,
       coalesce((r->>'deleted')::boolean, false),
