@@ -5,6 +5,9 @@
 :root {
   color-scheme: light;
 }
+:root.dark {
+  color-scheme: dark;
+}
 
 html,
 body,
@@ -13,7 +16,7 @@ body,
 }
 
 body {
-  @apply bg-cream font-sans text-slate-800 antialiased;
+  @apply bg-cream font-sans text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-100;
   margin: 0;
   overscroll-behavior-y: none;
 }
@@ -37,7 +40,7 @@ body {
 /* Reusable component classes */
 @layer components {
   .card {
-    @apply rounded-2xl bg-white shadow-card;
+    @apply rounded-2xl bg-white shadow-card dark:bg-slate-900;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
@@ -46,16 +49,16 @@ body {
     @apply btn bg-brand-600 text-white active:bg-brand-700;
   }
   .btn-ghost {
-    @apply btn bg-white text-slate-700 ring-1 ring-slate-200 active:bg-slate-50;
+    @apply btn bg-white text-slate-700 ring-1 ring-slate-200 active:bg-slate-50 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700 dark:active:bg-slate-800;
   }
   .btn-danger {
-    @apply btn bg-red-50 text-red-600 ring-1 ring-red-200 active:bg-red-100;
+    @apply btn bg-red-50 text-red-600 ring-1 ring-red-200 active:bg-red-100 dark:bg-red-950/60 dark:text-red-400 dark:ring-red-900/70 dark:active:bg-red-950;
   }
   .field {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-[15px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-brand-500 dark:focus:ring-brand-900;
   }
   .label {
-    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500;
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400;
   }
   .chip {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium;

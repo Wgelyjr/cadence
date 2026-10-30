@@ -1,6 +1,8 @@
 import { endOfDay, startOfDay } from 'date-fns';
 import { Droplets, Milk, Moon } from 'lucide-react';
 import { useAppStore } from '../lib/store';
+import { useSettings } from '../lib/settings';
+import { fmtVolume } from '../lib/units';
 import type { CareEvent } from '../lib/types';
 
 function minutesBetween(e: CareEvent): number {
@@ -17,6 +19,7 @@ function fmtSleep(mins: number): string {
 export default function SummaryStats() {
   const events = useAppStore((s) => s.events);
   const activeId = useAppStore((s) => s.activeChildId);
+  const units = useSettings((s) => s.units);
 
   const start = startOfDay(new Date());
   const end = endOfDay(new Date());
@@ -41,28 +44,35 @@ export default function SummaryStats() {
   return (
     <div className="grid grid-cols-3 gap-3">
       <div className="card p-3">
-        <Moon size={18} className="text-brand-500" />
-        <p className="mt-1.5 text-lg font-bold leading-none text-slate-800">{fmtSleep(sleepMin)}</p>
-        <p className="mt-1 text-xs text-slate-500">Sleep today</p>
-      </div>
-      <div className="card p-3">
-        <Milk size={18} className="text-emerald-500" />
-        <p className="mt-1.5 text-lg font-bold leading-none text-slate-800">
-          {feeds.length}
-          {feedMl > 0 && <span className="text-xs font-medium text-slate-400"> · {feedMl}ml</span>}
+        <Moon size={18} className="text-brand-500 dark:text-brand-400" />
+        <p className="mt-1.5 text-lg font-bold leading-none text-slate-800 dark:text-slate-100">
+          {fmtSleep(sleepMin)}
         </p>
-        <p className="mt-1 text-xs text-slate-500">Feeds</p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Sleep today</p>
       </div>
       <div className="card p-3">
-        <Droplets size={18} className="text-sky-500" />
-        <p className="mt-1.5 text-lg font-bold leading-none text-slate-800">
+        <Milk size={18} className="text-emerald-500 dark:text-emerald-400" />
+        <p className="mt-1.5 text-lg font-bold leading-none text-slate-800 dark:text-slate-100">
+          {feeds.length}
+          {feedMl > 0 && (
+            <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+              {' '}
+              · {fmtVolume(feedMl, units)}
+            </span>
+          )}
+        </p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Feeds</p>
+      </div>
+      <div className="card p-3">
+        <Droplets size={18} className="text-sky-500 dark:text-sky-400" />
+        <p className="mt-1.5 text-lg font-bold leading-none text-slate-800 dark:text-slate-100">
           {diapers.length}
-          <span className="text-xs font-medium text-slate-400">
+          <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
             {' '}
             ({wet}w·{dirty}d)
           </span>
         </p>
-        <p className="mt-1 text-xs text-slate-500">Diapers</p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Diapers</p>
       </div>
     </div>
   );

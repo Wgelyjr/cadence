@@ -194,8 +194,8 @@ begin
       (r->>'birth_date')::date,
       r->>'birth_time',
       r->>'color',
-      to_timestamp(r->>'created_at'),
-      to_timestamp(r->>'updated_at')
+      (r->>'created_at')::timestamptz,
+      (r->>'updated_at')::timestamptz
     )
     on conflict (id) do update set
       name = excluded.name,
@@ -244,8 +244,8 @@ begin
       (r->>'child_id')::uuid,
       care_group_id,
       r->>'type',
-      to_timestamp(r->>'start_time'),
-      to_timestamp(r->>'end_time'),
+      (r->>'start_time')::timestamptz,
+      (r->>'end_time')::timestamptz,
       r->>'sleep_kind', r->>'feed_method', r->>'feed_side',
       (r->>'feed_side_duration_min')::int,
       (r->>'bottle_ml')::int, (r->>'pump_ml')::int,
@@ -264,8 +264,8 @@ begin
         coalesce((select array_agg(x) from jsonb_array_elements_text(r->'photos') x), '{}'::text[])
       else null end,
       coalesce((r->>'deleted')::boolean, false),
-      to_timestamp(r->>'created_at'),
-      to_timestamp(r->>'updated_at')
+      (r->>'created_at')::timestamptz,
+      (r->>'updated_at')::timestamptz
     )
     on conflict (id) do update set
       type = excluded.type,

@@ -15,23 +15,23 @@ export default function SyncBadge() {
   if (!isSupabaseConfigured) {
     icon = <CloudOff size={14} />;
     label = 'Local';
-    cls = 'bg-slate-100 text-slate-500';
+    cls = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
   } else if (state === 'syncing') {
     icon = <Loader2 size={14} className="animate-spin" />;
     label = 'Syncing';
-    cls = 'bg-brand-50 text-brand-600';
+    cls = 'bg-brand-50 text-brand-600 dark:bg-brand-950 dark:text-brand-400';
   } else if (state === 'offline' || !online) {
     icon = <CloudOff size={14} />;
     label = 'Offline';
-    cls = 'bg-amber-50 text-amber-600';
+    cls = 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400';
   } else if (state === 'error') {
     icon = <CloudOff size={14} />;
     label = 'Sync issue';
-    cls = 'bg-red-50 text-red-600';
+    cls = 'bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400';
   } else {
     icon = <Cloud size={14} />;
     label = 'Synced';
-    cls = 'bg-emerald-50 text-emerald-600';
+    cls = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400';
   }
 
   return (

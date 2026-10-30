@@ -28,7 +28,7 @@ export default function Layout({ tab, onTab, children }: Props) {
 
       <main className="no-scrollbar flex-1 overflow-y-auto px-4 pb-4 pt-1">{children}</main>
 
-      <nav className="pb-safe border-t border-slate-200 bg-white/95 backdrop-blur">
+      <nav className="pb-safe border-t border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
         <div className="flex">
           {TABS.map((t) => {
             const active = tab === t.id;
@@ -39,7 +39,7 @@ export default function Layout({ tab, onTab, children }: Props) {
                 onClick={() => onTab(t.id)}
                 aria-current={active ? 'page' : undefined}
                 className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition ${
-                  active ? 'text-brand-600' : 'text-slate-400'
+                  active ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400 dark:text-slate-500'
                 }`}
               >
                 <Icon size={20} strokeWidth={active ? 2.4 : 2} />

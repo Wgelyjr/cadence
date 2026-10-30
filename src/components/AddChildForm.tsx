@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAppStore } from '../lib/store';
 
-const PALETTE = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+export const PALETTE = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
 
 /** Form to add a new child profile. */
 export default function AddChildForm({ onDone }: { onDone: () => void }) {
@@ -26,7 +26,10 @@ export default function AddChildForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl bg-slate-50 p-3">
+    <form
+      onSubmit={submit}
+      className="space-y-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60"
+    >
       <div>
         <label className="label">Name</label>
         <input

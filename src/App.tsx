@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Moon } from 'lucide-react';
 import { useAppStore } from './lib/store';
+import { useSettings } from './lib/settings';
+import { watchSystemTheme } from './lib/theme';
 import Layout from './components/Layout';
 import Onboarding from './pages/Onboarding';
 import Today from './pages/Today';
@@ -13,9 +15,9 @@ export type Tab = 'today' | 'log' | 'timeline' | 'barry' | 'settings';
 
 function Splash() {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-brand-600">
+    <div className="flex h-full flex-col items-center justify-center gap-3 text-brand-600 dark:text-brand-400">
       <Moon size={44} className="animate-pulse-soft" />
-      <p className="text-sm font-medium text-slate-500">Loading…</p>
+      <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Loading…</p>
     </div>
   );
 }
@@ -26,10 +28,19 @@ export default function App() {
   const init = useAppStore((s) => s.init);
   const setOnline = useAppStore((s) => s.setOnline);
   const [tab, setTab] = useState<Tab>('today');
+  const theme = useSettings((s) => s.theme);
 
   useEffect(() => {
     void init();
   }, [init]);
+
+  // Follow the OS color scheme while the theme is set to "system".
+  useEffect(() => {
+    if (theme !== 'system') return;
+    return watchSystemTheme((dark) => {
+      document.documentElement.classList.toggle('dark', dark);
+    });
+  }, [theme]);
 
   useEffect(() => {
     const on = () => setOnline(true);

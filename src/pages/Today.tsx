@@ -31,10 +31,10 @@ export default function Today({ goToLog }: Props) {
       </button>
 
       <section>
-        <h2 className="mb-2 text-sm font-semibold text-slate-700">Today</h2>
+        <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Today</h2>
         <div className="space-y-2">
           {today.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-400">
+            <p className="py-6 text-center text-sm text-slate-400 dark:text-slate-500">
               Nothing logged yet today.
             </p>
           ) : (

@@ -21,7 +21,7 @@ export default function Seg({ value, onChange, options }: Props) {
           className={`rounded-lg px-3 py-1.5 text-sm font-medium ring-1 transition ${
             value === o.value
               ? 'bg-brand-600 text-white ring-brand-600'
-              : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
+              : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800'
           }`}
         >
           {o.label}

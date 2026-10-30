@@ -31,7 +31,7 @@ export default function ChildSwitcher() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded-xl px-1.5 py-1 hover:bg-slate-100"
+        className="flex items-center gap-2 rounded-xl px-1.5 py-1 hover:bg-slate-100 dark:hover:bg-slate-800"
       >
         <span
           className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white"
@@ -40,12 +40,14 @@ export default function ChildSwitcher() {
           {initials(active.name)}
         </span>
         <span className="text-left">
-          <span className="block text-sm font-semibold leading-tight text-slate-800">
+          <span className="block text-sm font-semibold leading-tight text-slate-800 dark:text-slate-100">
             {active.name}
           </span>
-          <span className="block text-xs text-slate-500">{ageLabel(active.birth_date)}</span>
+          <span className="block text-xs text-slate-500 dark:text-slate-400">
+            {ageLabel(active.birth_date)}
+          </span>
         </span>
-        <ChevronDown size={16} className="text-slate-400" />
+        <ChevronDown size={16} className="text-slate-400 dark:text-slate-500" />
       </button>
 
       <Modal
@@ -65,7 +67,9 @@ export default function ChildSwitcher() {
                 setOpen(false);
               }}
               className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
-                c.id === active.id ? 'border-brand-400 bg-brand-50' : 'border-slate-200 hover:bg-slate-50'
+                c.id === active.id
+                  ? 'border-brand-400 bg-brand-50 dark:border-brand-500 dark:bg-brand-950'
+                  : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'
               }`}
             >
               <span
@@ -75,8 +79,12 @@ export default function ChildSwitcher() {
                 {initials(c.name)}
               </span>
               <span>
-                <span className="block text-sm font-semibold text-slate-800">{c.name}</span>
-                <span className="block text-xs text-slate-500">{ageLabel(c.birth_date)}</span>
+                <span className="block text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {c.name}
+                </span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  {ageLabel(c.birth_date)}
+                </span>
               </span>
             </button>
           ))}

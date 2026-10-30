@@ -13,7 +13,22 @@ export type EventType =
   | 'milestone'
   | 'solid_food'
   | 'allergy'
-  | 'contraction';
+  | 'contraction'
+  | 'custom';
+
+export const BUILTIN_EVENT_TYPES = [
+  'sleep',
+  'feed',
+  'diaper',
+  'growth',
+  'health',
+  'milestone',
+  'solid_food',
+  'allergy',
+  'contraction',
+] as const;
+
+export type BuiltinEventType = (typeof BUILTIN_EVENT_TYPES)[number];
 
 export interface Child {
   id: string;
@@ -64,6 +79,12 @@ export interface CareEvent {
   medicine_name?: string;
   medicine_dose?: string;
 
+  // Custom events (user-defined types)
+  /** Id of the user-defined type (see settings.customTypes). */
+  custom_type_id?: string;
+  /** Denormalized label so entries render even if the type is later deleted. */
+  custom_label?: string;
+
   // Free-form / food / allergy / milestone / contraction
   label?: string;
   food_items?: string[];
@@ -104,4 +125,5 @@ export const EVENT_TYPE_META: Record<
   solid_food: { label: 'Solid food', icon: 'Apple', hint: 'Purees & baby-led' },
   allergy: { label: 'Allergy', icon: 'TriangleAlert', hint: 'Reactions to log' },
   contraction: { label: 'Contraction', icon: 'Timer', hint: 'Labor timer' },
+  custom: { label: 'Custom', icon: 'Star', hint: 'Your own event types' },
 };

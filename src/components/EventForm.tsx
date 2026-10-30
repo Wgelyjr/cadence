@@ -13,12 +13,25 @@ import {
   Thermometer,
   Timer,
 } from 'lucide-react';
-import type { CareEvent, EventType } from '../lib/types';
-import { EVENT_TYPE_META } from '../lib/types';
+import type { BuiltinEventType, CareEvent, EventType } from '../lib/types';
+import { BUILTIN_EVENT_TYPES, EVENT_TYPE_META } from '../lib/types';
 import { useAppStore } from '../lib/store';
+import { useSettings, visiblePickerIds } from '../lib/settings';
+import {
+  lengthToCm,
+  lengthUnit,
+  round1,
+  round2,
+  tempToC,
+  tempUnit,
+  volumeToMl,
+  volumeUnit,
+  weightToKg,
+  weightUnit,
+} from '../lib/units';
 import Seg from './Seg';
 
-const ICONS: Record<EventType, typeof Moon> = {
+const ICONS: Record<BuiltinEventType, typeof Moon> = {
   sleep: Moon,
   feed: Milk,
   diaper: Droplets,
@@ -109,7 +122,22 @@ export default function EventForm({ onSaved }: Props) {
   const activeChildId = useAppStore((s) => s.activeChildId);
   const addEvent = useAppStore((s) => s.addEvent);
 
-  const [type, setType] = useState<EventType>('sleep');
+  const units = useSettings((s) => s.units);
+  const customTypes = useSettings((s) => s.customTypes);
+  const logOrder = useSettings((s) => s.logOrder);
+  const hiddenTypes = useSettings((s) => s.hiddenTypes);
+
+  // Picker contents come from the log-display settings (order + visibility).
+  const pickerIds = useMemo(
+    () => visiblePickerIds({ logOrder, hiddenTypes }),
+    [logOrder, hiddenTypes],
+  );
+  const customById = useMemo(
+    () => new Map(customTypes.map((c) => [c.id, c])),
+    [customTypes],
+  );
+
+  const [selected, setSelected] = useState<string>(pickerIds[0] ?? 'sleep');
   const [form, setForm] = useState<FormState>(defaultForm);
   const [busy, setBusy] = useState(false);
   const [timerStart, setTimerStart] = useState<number | null>(null);
@@ -125,14 +153,17 @@ export default function EventForm({ onSaved }: Props) {
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
-  const useTimer = type === 'sleep' || type === 'feed' || type === 'contraction';
+  const selectedCustom = customById.get(selected);
+  const useTimer =
+    !selectedCustom &&
+    (selected === 'sleep' || selected === 'feed' || selected === 'contraction');
 
   function startTimer() {
     setTimerStart(Date.now());
     set('start_time', toLocalInput(new Date()));
   }
   function stopTimer() {
-    if (type === 'contraction') {
+    if (selected === 'contraction') {
       set('contraction_duration_sec', String(elapsed));
     } else {
       set('end_time', toLocalInput(new Date()));
@@ -140,7 +171,12 @@ export default function EventForm({ onSaved }: Props) {
     setTimerStart(null);
   }
 
-  const types = useMemo(() => Object.keys(EVENT_TYPE_META) as EventType[], []);
+  // Display units for labels/placeholders.
+  const volUnit = volumeUnit(units);
+  const lenUnit = lengthUnit(units);
+  const wUnit = weightUnit(units);
+  const tUnit = tempUnit(units);
+  const imperial = units === 'imperial';
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -148,13 +184,13 @@ export default function EventForm({ onSaved }: Props) {
     setBusy(true);
     try {
       const input: Partial<CareEvent> & { type: EventType; child_id: string } = {
-        type,
+        type: selectedCustom ? 'custom' : (selected as EventType),
         child_id: activeChildId,
         start_time: fromLocalInput(form.start_time || toLocalInput(new Date())),
       };
       if (form.end_time) input.end_time = fromLocalInput(form.end_time);
 
-      switch (type) {
+      switch (selected) {
         case 'sleep':
           input.sleep_kind = form.sleep_kind;
           break;
@@ -166,9 +202,9 @@ export default function EventForm({ onSaved }: Props) {
               input.feed_side_duration_min = Number(form.feed_side_duration_min);
           }
           if (form.feed_method === 'bottle' && form.bottle_ml)
-            input.bottle_ml = Number(form.bottle_ml);
+            input.bottle_ml = Math.round(volumeToMl(Number(form.bottle_ml), units));
           if (form.feed_method === 'pump' && form.pump_ml)
-            input.pump_ml = Number(form.pump_ml);
+            input.pump_ml = Math.round(volumeToMl(Number(form.pump_ml), units));
           break;
         case 'diaper':
           input.diaper_type = form.diaper_type;
@@ -178,12 +214,12 @@ export default function EventForm({ onSaved }: Props) {
           }
           break;
         case 'growth':
-          if (form.height_cm) input.height_cm = Number(form.height_cm);
-          if (form.weight_kg) input.weight_kg = Number(form.weight_kg);
-          if (form.head_cm) input.head_cm = Number(form.head_cm);
+          if (form.height_cm) input.height_cm = round2(lengthToCm(Number(form.height_cm), units));
+          if (form.weight_kg) input.weight_kg = round2(weightToKg(Number(form.weight_kg), units));
+          if (form.head_cm) input.head_cm = round2(lengthToCm(Number(form.head_cm), units));
           break;
         case 'health':
-          if (form.temp_c) input.temp_c = Number(form.temp_c);
+          if (form.temp_c) input.temp_c = round1(tempToC(Number(form.temp_c), units));
           if (form.medicine_name) input.medicine_name = form.medicine_name;
           if (form.medicine_dose) input.medicine_dose = form.medicine_dose;
           break;
@@ -207,6 +243,13 @@ export default function EventForm({ onSaved }: Props) {
             input.contraction_duration_sec = Number(form.contraction_duration_sec);
           if (form.label) input.label = form.label;
           break;
+        default:
+          break; // custom types: just times + note
+      }
+
+      if (selectedCustom) {
+        input.custom_type_id = selectedCustom.id;
+        input.custom_label = selectedCustom.label;
       }
       if (form.note) input.note = form.note;
 
@@ -221,27 +264,38 @@ export default function EventForm({ onSaved }: Props) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {/* Type picker */}
+      {/* Type picker — order & visibility from Settings > Log entries */}
       <div className="grid grid-cols-3 gap-2">
-        {types.map((t) => {
-          const Icon = ICONS[t];
-          const active = type === t;
+        {pickerIds.map((id) => {
+          const custom = customById.get(id);
+          const Icon = custom ? null : ICONS[id as BuiltinEventType];
+          const active = selected === id;
           return (
             <button
-              key={t}
+              key={id}
               type="button"
               onClick={() => {
-                setType(t);
+                setSelected(id);
                 setTimerStart(null);
               }}
               className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-xs font-medium transition ${
                 active
-                  ? 'border-brand-400 bg-brand-50 text-brand-700'
-                  : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                  ? 'border-brand-400 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-950 dark:text-brand-300'
+                  : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800'
               }`}
             >
-              <Icon size={20} />
-              {EVENT_TYPE_META[t].label}
+              {Icon ? (
+                <Icon size={20} />
+              ) : (
+                <span
+                  className="h-5 w-5 rounded-full ring-2 ring-white dark:ring-slate-900"
+                  style={{ background: custom!.color }}
+                  aria-hidden
+                />
+              )}
+              <span className="max-w-full truncate">
+                {custom ? custom.label : EVENT_TYPE_META[id as EventType].label}
+              </span>
             </button>
           );
         })}
@@ -249,10 +303,16 @@ export default function EventForm({ onSaved }: Props) {
 
       {/* Timer (sleep / feed / contraction) */}
       {useTimer && (
-        <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3">
+        <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800/60">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Timer</p>
-            <p className={`font-mono text-2xl tabular-nums ${timerStart ? 'text-brand-600' : 'text-slate-400'}`}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Timer
+            </p>
+            <p
+              className={`font-mono text-2xl tabular-nums ${
+                timerStart ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400 dark:text-slate-500'
+              }`}
+            >
               {fmtElapsed(elapsed)}
             </p>
           </div>
@@ -279,7 +339,7 @@ export default function EventForm({ onSaved }: Props) {
             onChange={(e) => set('start_time', e.target.value)}
           />
         </div>
-        {type !== 'contraction' && (
+        {selected !== 'contraction' && (
           <div>
             <label className="label">End</label>
             <input
@@ -293,7 +353,7 @@ export default function EventForm({ onSaved }: Props) {
       </div>
 
       {/* Type-specific fields */}
-      {type === 'sleep' && (
+      {selected === 'sleep' && (
         <div>
           <label className="label">Type</label>
           <Seg
@@ -307,7 +367,7 @@ export default function EventForm({ onSaved }: Props) {
         </div>
       )}
 
-      {type === 'feed' && (
+      {selected === 'feed' && (
         <div className="space-y-3">
           <div>
             <label className="label">Method</label>
@@ -350,34 +410,36 @@ export default function EventForm({ onSaved }: Props) {
           )}
           {form.feed_method === 'bottle' && (
             <div>
-              <label className="label">Volume (ml)</label>
+              <label className="label">Volume ({volUnit})</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step={imperial ? '0.5' : '5'}
                 className="field"
                 value={form.bottle_ml}
                 onChange={(e) => set('bottle_ml', e.target.value)}
-                placeholder="120"
+                placeholder={imperial ? '4' : '120'}
               />
             </div>
           )}
           {form.feed_method === 'pump' && (
             <div>
-              <label className="label">Pumped (ml)</label>
+              <label className="label">Pumped ({volUnit})</label>
               <input
                 type="number"
-                inputMode="numeric"
+                inputMode="decimal"
+                step={imperial ? '0.5' : '5'}
                 className="field"
                 value={form.pump_ml}
                 onChange={(e) => set('pump_ml', e.target.value)}
-                placeholder="80"
+                placeholder={imperial ? '2.5' : '80'}
               />
             </div>
           )}
         </div>
       )}
 
-      {type === 'diaper' && (
+      {selected === 'diaper' && (
         <div className="space-y-3">
           <div>
             <label className="label">Type</label>
@@ -416,61 +478,115 @@ export default function EventForm({ onSaved }: Props) {
         </div>
       )}
 
-      {type === 'growth' && (
+      {selected === 'growth' && (
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="label">Height (cm)</label>
-            <input type="number" inputMode="decimal" className="field" value={form.height_cm} onChange={(e) => set('height_cm', e.target.value)} />
+            <label className="label">Height ({lenUnit})</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              step={imperial ? '0.1' : '0.5'}
+              className="field"
+              value={form.height_cm}
+              onChange={(e) => set('height_cm', e.target.value)}
+            />
           </div>
           <div>
-            <label className="label">Weight (kg)</label>
-            <input type="number" inputMode="decimal" className="field" value={form.weight_kg} onChange={(e) => set('weight_kg', e.target.value)} />
+            <label className="label">Weight ({wUnit})</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              step={imperial ? '0.1' : '0.1'}
+              className="field"
+              value={form.weight_kg}
+              onChange={(e) => set('weight_kg', e.target.value)}
+            />
           </div>
           <div>
-            <label className="label">Head (cm)</label>
-            <input type="number" inputMode="decimal" className="field" value={form.head_cm} onChange={(e) => set('head_cm', e.target.value)} />
+            <label className="label">Head ({lenUnit})</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              step={imperial ? '0.1' : '0.5'}
+              className="field"
+              value={form.head_cm}
+              onChange={(e) => set('head_cm', e.target.value)}
+            />
           </div>
         </div>
       )}
 
-      {type === 'health' && (
+      {selected === 'health' && (
         <div className="space-y-3">
           <div>
-            <label className="label">Temperature (°C)</label>
-            <input type="number" inputMode="decimal" step="0.1" className="field" value={form.temp_c} onChange={(e) => set('temp_c', e.target.value)} placeholder="36.8" />
+            <label className="label">Temperature ({tUnit})</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              className="field"
+              value={form.temp_c}
+              onChange={(e) => set('temp_c', e.target.value)}
+              placeholder={imperial ? '98.2' : '36.8'}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Medicine</label>
-              <input className="field" value={form.medicine_name} onChange={(e) => set('medicine_name', e.target.value)} placeholder="e.g. paracetamol" />
+              <input
+                className="field"
+                value={form.medicine_name}
+                onChange={(e) => set('medicine_name', e.target.value)}
+                placeholder="e.g. paracetamol"
+              />
             </div>
             <div>
               <label className="label">Dose</label>
-              <input className="field" value={form.medicine_dose} onChange={(e) => set('medicine_dose', e.target.value)} placeholder="e.g. 2.5 ml" />
+              <input
+                className="field"
+                value={form.medicine_dose}
+                onChange={(e) => set('medicine_dose', e.target.value)}
+                placeholder={imperial ? 'e.g. 0.5 oz' : 'e.g. 2.5 ml'}
+              />
             </div>
           </div>
         </div>
       )}
 
-      {type === 'milestone' && (
+      {selected === 'milestone' && (
         <div>
           <label className="label">Milestone</label>
-          <input className="field" value={form.label} onChange={(e) => set('label', e.target.value)} placeholder="e.g. First smile" />
+          <input
+            className="field"
+            value={form.label}
+            onChange={(e) => set('label', e.target.value)}
+            placeholder="e.g. First smile"
+          />
         </div>
       )}
 
-      {type === 'solid_food' && (
+      {selected === 'solid_food' && (
         <div>
           <label className="label">Foods (comma separated)</label>
-          <input className="field" value={form.food_items} onChange={(e) => set('food_items', e.target.value)} placeholder="e.g. carrot, rice cereal" />
+          <input
+            className="field"
+            value={form.food_items}
+            onChange={(e) => set('food_items', e.target.value)}
+            placeholder="e.g. carrot, rice cereal"
+          />
         </div>
       )}
 
-      {type === 'allergy' && (
+      {selected === 'allergy' && (
         <div className="space-y-3">
           <div>
             <label className="label">Suspected cause</label>
-            <input className="field" value={form.label} onChange={(e) => set('label', e.target.value)} placeholder="e.g. cow's milk" />
+            <input
+              className="field"
+              value={form.label}
+              onChange={(e) => set('label', e.target.value)}
+              placeholder="e.g. cow's milk"
+            />
           </div>
           <div>
             <label className="label">Reaction</label>
@@ -496,24 +612,47 @@ export default function EventForm({ onSaved }: Props) {
         </div>
       )}
 
-      {type === 'contraction' && (
+      {selected === 'contraction' && (
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="label">Duration (sec)</label>
-            <input type="number" inputMode="numeric" className="field" value={form.contraction_duration_sec} onChange={(e) => set('contraction_duration_sec', e.target.value)} placeholder="60" />
+            <input
+              type="number"
+              inputMode="numeric"
+              className="field"
+              value={form.contraction_duration_sec}
+              onChange={(e) => set('contraction_duration_sec', e.target.value)}
+              placeholder="60"
+            />
           </div>
           <div>
             <label className="label">Note</label>
-            <input className="field" value={form.label} onChange={(e) => set('label', e.target.value)} placeholder="optional" />
+            <input
+              className="field"
+              value={form.label}
+              onChange={(e) => set('label', e.target.value)}
+              placeholder="optional"
+            />
           </div>
         </div>
       )}
 
+      {selectedCustom && (
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          {selectedCustom.label} — custom entry. Add times and a note.
+        </p>
+      )}
+
       {/* Note */}
-      {type !== 'contraction' && (
+      {selected !== 'contraction' && (
         <div>
           <label className="label">Note (optional)</label>
-          <input className="field" value={form.note} onChange={(e) => set('note', e.target.value)} placeholder="Anything worth remembering" />
+          <input
+            className="field"
+            value={form.note}
+            onChange={(e) => set('note', e.target.value)}
+            placeholder="Anything worth remembering"
+          />
         </div>
       )}
 

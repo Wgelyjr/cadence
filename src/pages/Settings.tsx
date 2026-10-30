@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
+  ChevronDown,
+  ChevronUp,
   Cloud,
   Download,
+  Eye,
+  EyeOff,
+  List,
   LogOut,
+  Palette,
   Pencil,
+  Plus,
   RefreshCw,
   Trash2,
 } from 'lucide-react';
@@ -11,8 +18,11 @@ import Modal from '../components/Modal';
 import { isSupabaseConfigured } from '../lib/config';
 import { getSupabase } from '../lib/supabase';
 import { useAppStore } from '../lib/store';
-import type { Child } from '../lib/types';
+import { useSettings, type Theme, type Units } from '../lib/settings';
+import type { Child, EventType } from '../lib/types';
+import { EVENT_TYPE_META } from '../lib/types';
 import { ageLabel, exportCSV, exportJSON } from '../lib/utils';
+import { PALETTE } from '../components/AddChildForm';
 import { initials } from '../components/ChildSwitcher';
 
 // ---------------------------------------------------------------------------
@@ -56,7 +66,7 @@ function SignInModal({ open, onClose }: { open: boolean; onClose: () => void }) 
               className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium ring-1 ${
                 mode === m
                   ? 'bg-brand-600 text-white ring-brand-600'
-                  : 'bg-white text-slate-600 ring-slate-200'
+                  : 'bg-white text-slate-600 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700'
               }`}
             >
               {m === 'signin' ? 'Sign in' : 'Sign up'}
@@ -71,11 +81,11 @@ function SignInModal({ open, onClose }: { open: boolean; onClose: () => void }) 
           <label className="label">Password</label>
           <input type="password" className="field" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button type="submit" className="btn-primary w-full" disabled={busy}>
           {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
         </button>
-        <p className="text-center text-xs text-slate-400">
+        <p className="text-center text-xs text-slate-400 dark:text-slate-500">
           Signing in lets BabyApp sync across your devices and caregivers.
         </p>
       </form>
@@ -104,10 +114,10 @@ function SyncCard() {
   if (!isSupabaseConfigured) {
     return (
       <Card title="Sync" icon={<Cloud size={16} />}>
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           Running in <strong>local-only</strong> mode — data stays on this device. To sync
-          across devices and caregivers, set <code className="rounded bg-slate-100 px-1">VITE_SUPABASE_URL</code>{' '}
-          and <code className="rounded bg-slate-100 px-1">VITE_SUPABASE_ANON_KEY</code> and rebuild.
+          across devices and caregivers, set <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">VITE_SUPABASE_URL</code>{' '}
+          and <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">VITE_SUPABASE_ANON_KEY</code> and rebuild.
         </p>
       </Card>
     );
@@ -119,8 +129,10 @@ function SyncCard() {
         {user ? (
           <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-slate-700">{user.email}</p>
-              <p className="text-xs text-slate-400">
+              <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+                {user.email}
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
                 {lastSyncAt ? `Last sync ${new Date(lastSyncAt).toLocaleTimeString()}` : 'Not synced yet'}
               </p>
             </div>
@@ -143,10 +155,237 @@ function SyncCard() {
           </button>
         )}
         {syncError && syncState === 'error' && (
-          <p className="rounded-lg bg-red-50 p-2 text-xs text-red-600">{syncError}</p>
+          <p className="rounded-lg bg-red-50 p-2 text-xs text-red-600 dark:bg-red-950/60 dark:text-red-400">
+            {syncError}
+          </p>
         )}
       </div>
       <SignInModal open={signIn} onClose={() => setSignIn(false)} />
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Appearance & units
+// ---------------------------------------------------------------------------
+
+function PreferencesCard() {
+  const theme = useSettings((s) => s.theme);
+  const setTheme = useSettings((s) => s.setTheme);
+  const units = useSettings((s) => s.units);
+  const setUnits = useSettings((s) => s.setUnits);
+
+  return (
+    <Card title="Appearance & units" icon={<Palette size={16} />}>
+      <div className="space-y-3">
+        <div>
+          <label className="label">Theme</label>
+          <div className="flex gap-1.5">
+            {(['light', 'dark', 'system'] as Theme[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTheme(t)}
+                className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium capitalize ring-1 transition ${
+                  theme === t
+                    ? 'bg-brand-600 text-white ring-brand-600'
+                    : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="label">Units</label>
+          <div className="flex gap-1.5">
+            {(
+              [
+                { value: 'metric', label: 'Metric', sub: 'ml · kg · cm · °C' },
+                { value: 'imperial', label: 'US', sub: 'oz · lb · in · °F' },
+              ] as { value: Units; label: string; sub: string }[]
+            ).map((u) => (
+              <button
+                key={u.value}
+                type="button"
+                onClick={() => setUnits(u.value)}
+                className={`flex-1 rounded-lg px-3 py-1.5 text-left ring-1 transition ${
+                  units === u.value
+                    ? 'bg-brand-600 text-white ring-brand-600'
+                    : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span className="block text-sm font-medium">{u.label}</span>
+                <span
+                  className={`block text-[11px] ${
+                    units === u.value ? 'text-brand-100' : 'text-slate-400 dark:text-slate-500'
+                  }`}
+                >
+                  {u.sub}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Custom event types
+// ---------------------------------------------------------------------------
+
+function CustomEventsCard() {
+  const customTypes = useSettings((s) => s.customTypes);
+  const addCustomType = useSettings((s) => s.addCustomType);
+  const removeCustomType = useSettings((s) => s.removeCustomType);
+  const [label, setLabel] = useState('');
+  const [color, setColor] = useState(PALETTE[0]);
+
+  return (
+    <Card title="Custom events" icon={<Plus size={16} />}>
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+        Define your own event types — e.g. vitamins, tummy time, medication.
+      </p>
+
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!label.trim()) return;
+          addCustomType(label, color);
+          setLabel('');
+        }}
+      >
+        <div className="flex gap-2">
+          <input
+            className="field"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="e.g. Vitamins"
+            maxLength={24}
+          />
+          <button type="submit" className="btn-primary shrink-0 px-3" disabled={!label.trim()}>
+            <Plus size={16} /> Add
+          </button>
+        </div>
+        <div className="flex gap-1.5">
+          {PALETTE.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setColor(c)}
+              className={`h-6 w-6 rounded-full transition ${
+                color === c ? 'ring-2 ring-brand-500 ring-offset-2 dark:ring-offset-slate-900' : ''
+              }`}
+              style={{ background: c }}
+              aria-label={`Color ${c}`}
+            />
+          ))}
+        </div>
+      </form>
+
+      {customTypes.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {customTypes.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: t.color }} />
+              <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                {t.label}
+              </span>
+              <button
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/60 dark:hover:text-red-400"
+                onClick={() => removeCustomType(t.id)}
+                aria-label={`Delete ${t.label}`}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+          <p className="px-2 pt-1 text-[11px] text-slate-400 dark:text-slate-500">
+            Deleting a type keeps its logged entries.
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Log display (which types show up, in what order)
+// ---------------------------------------------------------------------------
+
+function LogDisplayCard() {
+  const logOrder = useSettings((s) => s.logOrder);
+  const hiddenTypes = useSettings((s) => s.hiddenTypes);
+  const customTypes = useSettings((s) => s.customTypes);
+  const moveLogType = useSettings((s) => s.moveLogType);
+  const toggleHiddenType = useSettings((s) => s.toggleHiddenType);
+  const customById = new Map(customTypes.map((c) => [c.id, c]));
+
+  return (
+    <Card title="Log entries" icon={<List size={16} />}>
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+        Choose which types appear on the Log screen and in what order.
+      </p>
+      <div className="space-y-0.5">
+        {logOrder.map((id, i) => {
+          const custom = customById.get(id);
+          const label = custom ? custom.label : EVENT_TYPE_META[id as EventType].label;
+          const hidden = hiddenTypes.includes(id);
+          return (
+            <div
+              key={id}
+              className={`flex items-center gap-1.5 rounded-lg px-1 py-1 ${
+                hidden ? 'opacity-45' : ''
+              }`}
+            >
+              <div className="flex flex-col">
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => moveLogType(id, -1)}
+                  className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                  aria-label={`Move ${label} up`}
+                >
+                  <ChevronUp size={14} />
+                </button>
+                <button
+                  type="button"
+                  disabled={i === logOrder.length - 1}
+                  onClick={() => moveLogType(id, 1)}
+                  className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                  aria-label={`Move ${label} down`}
+                >
+                  <ChevronDown size={14} />
+                </button>
+              </div>
+              {custom ? (
+                <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: custom.color }} />
+              ) : (
+                <span className="h-3 w-3 shrink-0 rounded-full bg-slate-200 dark:bg-slate-700" />
+              )}
+              <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                {label}
+              </span>
+              <button
+                type="button"
+                onClick={() => toggleHiddenType(id)}
+                className={`rounded-lg p-1.5 ${
+                  hidden
+                    ? 'text-slate-400 dark:text-slate-500'
+                    : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                }`}
+                aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
+              >
+                {hidden ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
     </Card>
   );
 }
@@ -219,13 +458,21 @@ function ChildrenCard() {
               {initials(c.name)}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-700">{c.name}</p>
-              <p className="text-xs text-slate-400">{ageLabel(c.birth_date)}</p>
+              <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">
+                {c.name}
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{ageLabel(c.birth_date)}</p>
             </div>
-            <button className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" onClick={() => setEditing(c)}>
+            <button
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              onClick={() => setEditing(c)}
+            >
               <Pencil size={15} />
             </button>
-            <button className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500" onClick={() => setDeleting(c)}>
+            <button
+              className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/60 dark:hover:text-red-400"
+              onClick={() => setDeleting(c)}
+            >
               <Trash2 size={15} />
             </button>
           </div>
@@ -236,7 +483,7 @@ function ChildrenCard() {
       <Modal open={!!deleting} title="Delete child" onClose={() => setDeleting(null)}>
         {deleting && (
           <>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
               Delete <strong>{deleting.name}</strong> and all of their logged entries? This
               removes them on this device{isSupabaseConfigured ? ' and from sync' : ''}.
             </p>
@@ -297,7 +544,7 @@ function DataCard() {
       </div>
 
       <Modal open={confirmDelete} title="Delete all data" onClose={() => setConfirmDelete(false)}>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-slate-600 dark:text-slate-300">
           This permanently deletes <strong>all</strong> children and entries
           {isSupabaseConfigured ? ' on this device and from sync' : ' on this device'}. This
           cannot be undone.
@@ -326,8 +573,8 @@ function DataCard() {
 function Card({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="card p-4">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-        <span className="text-brand-600">{icon}</span>
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+        <span className="text-brand-600 dark:text-brand-400">{icon}</span>
         {title}
       </h2>
       {children}
@@ -338,12 +585,15 @@ function Card({ title, icon, children }: { title: string; icon: React.ReactNode;
 export default function Settings() {
   return (
     <div className="animate-fade-in space-y-4">
-      <h1 className="text-lg font-bold text-slate-800">Settings</h1>
+      <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">Settings</h1>
       <SyncCard />
+      <PreferencesCard />
+      <LogDisplayCard />
+      <CustomEventsCard />
       <ChildrenCard />
       <DataCard />
       <Card title="About" icon={<Cloud size={16} />}>
-        <p className="text-xs leading-relaxed text-slate-500">
+        <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
           BabyApp is a care tracker — it records and organizes your baby's care. It is not a
           medical device and does not provide medical advice. For anything health-related,
           talk to your own doctor or a healthcare professional.

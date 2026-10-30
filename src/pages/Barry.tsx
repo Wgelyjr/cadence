@@ -84,15 +84,15 @@ export default function Barry() {
   if (!isBarryAvailable) {
     return (
       <div className="animate-fade-in flex h-full flex-col items-center justify-center px-6 text-center">
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-100 text-brand-600">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-100 text-brand-600 dark:bg-brand-950 dark:text-brand-400">
           <Bot size={30} />
         </div>
-        <h1 className="text-xl font-bold text-slate-800">Barry is offline</h1>
-        <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-500">
+        <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">Barry is offline</h1>
+        <p className="mt-2 max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
           Barry answers questions using your recorded data plus a curated reference
-          corpus. To enable it, set <code className="rounded bg-slate-100 px-1">VITE_SUPABASE_URL</code>{' '}
-          and <code className="rounded bg-slate-100 px-1">VITE_SUPABASE_ANON_KEY</code>, deploy the{' '}
-          <code className="rounded bg-slate-100 px-1">barry</code> edge function, and set its
+          corpus. To enable it, set <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">VITE_SUPABASE_URL</code>{' '}
+          and <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">VITE_SUPABASE_ANON_KEY</code>, deploy the{' '}
+          <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">barry</code> edge function, and set its
           secrets (an OpenAI-compatible endpoint).
         </p>
       </div>
@@ -102,9 +102,9 @@ export default function Barry() {
   return (
     <div className="animate-fade-in flex h-full flex-col">
       <div className="mb-2 flex items-center gap-2">
-        <h1 className="text-lg font-bold text-slate-800">Barry</h1>
+        <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">Barry</h1>
         {child && (
-          <span className="chip bg-brand-50 text-brand-600">
+          <span className="chip bg-brand-50 text-brand-600 dark:bg-brand-950 dark:text-brand-400">
             {child.name} · {ageLabel(child.birth_date)}
           </span>
         )}
@@ -112,7 +112,7 @@ export default function Barry() {
 
       <div className="no-scrollbar flex-1 space-y-3 overflow-y-auto pb-3">
         {messages.length === 0 && (
-          <div className="rounded-xl bg-brand-50 p-4 text-sm text-brand-700">
+          <div className="rounded-xl bg-brand-50 p-4 text-sm text-brand-700 dark:bg-brand-950 dark:text-brand-300">
             Ask me about {child?.name ?? 'your baby'}'s sleep, feeding or development — e.g.
             "When should I expect the next nap?" or "How much is baby sleeping lately?"
           </div>
@@ -126,14 +126,14 @@ export default function Barry() {
               className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap ${
                 m.role === 'user'
                   ? 'bg-brand-600 text-white'
-                  : 'bg-white text-slate-700 shadow-card'
+                  : 'bg-white text-slate-700 shadow-card dark:bg-slate-800 dark:text-slate-200'
               }`}
             >
               {m.role === 'assistant' && m.content === '' ? (
                 <span className="inline-flex gap-1 text-slate-400">
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.2s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 [animation-delay:-0.1s]" />
-                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 dark:bg-slate-600 [animation-delay:-0.2s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 dark:bg-slate-600 [animation-delay:-0.1s]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300 dark:bg-slate-600" />
                 </span>
               ) : (
                 m.content
@@ -142,12 +142,17 @@ export default function Barry() {
           </div>
         ))}
         {error && (
-          <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</div>
+          <div className="rounded-xl bg-red-50 p-3 text-sm text-red-600 dark:bg-red-950/60 dark:text-red-400">
+            {error}
+          </div>
         )}
         <div ref={endRef} />
       </div>
 
-      <form onSubmit={send} className="sticky bottom-0 flex items-end gap-2 border-t border-slate-200 bg-cream pt-3 pb-1">
+      <form
+        onSubmit={send}
+        className="sticky bottom-0 flex items-end gap-2 border-t border-slate-200 bg-cream pt-3 pb-1 dark:border-slate-800 dark:bg-slate-950"
+      >
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}

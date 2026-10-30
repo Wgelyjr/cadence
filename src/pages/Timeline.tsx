@@ -25,15 +25,17 @@ export default function Timeline() {
 
   return (
     <div className="animate-fade-in space-y-4">
-      <h1 className="text-lg font-bold text-slate-800">History</h1>
+      <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">History</h1>
 
       {groups.length === 0 && (
-        <p className="py-10 text-center text-sm text-slate-400">No entries yet.</p>
+        <p className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
+          No entries yet.
+        </p>
       )}
 
       {groups.map((g) => (
         <section key={g.date}>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
             {format(new Date(g.date), 'EEEE, MMM d')}
           </h2>
           <div className="space-y-2">

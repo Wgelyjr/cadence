@@ -39,8 +39,11 @@ export async function syncPush(
 
   if (liveChildren.length) {
     const groupId = groupForRows(liveChildren)!;
+    // Pass the raw array — supabase-js serializes the RPC params to JSON.
+    // Stringifying here would double-encode it and Postgres would receive a
+    // scalar string ("cannot extract elements from a scalar").
     const { error } = await sb.rpc('upsert_children', {
-      rows: JSON.stringify(liveChildren),
+      rows: liveChildren,
       care_group_id: groupId,
     });
     if (error) throw new Error(`push children: ${error.message}`);
@@ -54,7 +57,7 @@ export async function syncPush(
     for (let i = 0; i < liveEvents.length; i += CHUNK) {
       const slice = liveEvents.slice(i, i + CHUNK);
       const { error } = await sb.rpc('upsert_events', {
-        rows: JSON.stringify(slice),
+        rows: slice,
         care_group_id: groupId,
       });
       if (error) throw new Error(`push events: ${error.message}`);
