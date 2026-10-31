@@ -5,22 +5,34 @@ import { CM_PER_IN, KG_PER_LB, ML_PER_OZ, round1, round2 } from './units';
  * Huckleberry CSV import.
  *
  * Huckleberry exports one CSV per child profile. All event types share a
- * single table, and the meaning of the side columns depends on `Type`:
+ * single table (current exports have 9 columns; the meaning of the side
+ * columns depends on `Type`):
  *
- *   Type | Start | End | Start Condition | Start Location | End Condition | Notes
+ *   Type, Start, End, Duration, Start Condition, Start Location, End Condition, Notes, Logged By
  *
  *   Sleep  → End = wake time, Start Condition = context label ("Crib")
- *   Feed   → Start Location = method ("Breast Milk Bottle"), End Condition = volume
- *   Pump   → Start Condition = volume ("10ml")
- *   Diaper → wet/soiled usually only in Notes
- *   Growth → Start Condition = weight, Start Location = length, End Condition = head
+ *   Feed   → bottle: Start Condition = milk type ("Breast Milk"),
+ *            Start Location = "Bottle", End Condition = volume ("4oz")
+ *            nursing: side + duration in the condition columns
+ *            ("00:10R" = 10 min on the right, "00:10R" + "00:10L" = both)
+ *   Pump   → Start Condition = volume ("2.75oz")
+ *   Diaper → Start Condition = stool color, Start Location = consistency
+ *            ("Loose"), Notes = "Poo:medium" / "Pee:large" /
+ *            "Both |  pee:medium poo:small"
+ *   Growth → Start Condition = weight, Start Location = length,
+ *            End Condition = head ("7.46lbs.oz" = 7 lb 4.6 oz,
+ *            "1.63ft.in" = 1 ft 6.3 in)
  *
  * Quirks we must respect:
- *  - `Start` is a local timestamp "DD/MM/YY HH:MM" with no timezone suffix —
- *    it is interpreted in the importing device's local timezone.
+ *  - `Start`/`End` are local timestamps with no timezone suffix — current
+ *    exports use "YYYY-MM-DD HH:MM"; "DD/MM/YY HH:MM" (2-digit years) is
+ *    also accepted. Both are interpreted in the importing device's local
+ *    timezone.
  *  - Values may carry a unit suffix ("9.02kg", "69cm", "60ml"); unitless
- *    values are assumed metric. Everything is stored in canonical metric
- *    (ml, kg, cm), like the rest of the app.
+ *    values are assumed metric. Imperial compound growth units put the
+ *    small unit in the fractional part ("7.46lbs.oz" = 7 lb + 4.6 oz).
+ *    Everything is stored in canonical metric (ml, kg, cm), like the rest
+ *    of the app.
  */
 
 export interface HuckleberryRow {
@@ -96,23 +108,51 @@ export function parseCsv(text: string): string[][] {
 
 // --- Dates -------------------------------------------------------------------
 
-/** "DD/MM/YY HH:MM" (also tolerates 4-digit years, "T" separator, ". " dividers). */
-const DATE_RE = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::\d{2})?)?/;
+/** Year first, as current exports use: "2026-10-30 14:25" (optional seconds, "T" or "." dividers). */
+const ISO_DATE_RE = /^(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/;
+/** Day first, as older exports used: "30/10/26 14:25" (2- or 4-digit year). */
+const DMY_DATE_RE = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/;
 
-export function parseHuckleberryDate(raw: string): Date | null {
-  const m = DATE_RE.exec(raw.trim());
-  if (!m) return null;
-  const day = Number(m[1]);
-  const month = Number(m[2]);
-  let year = Number(m[3]);
-  if (year < 100) year += year < 70 ? 2000 : 1900;
-  const hour = m[4] != null ? Number(m[4]) : 0;
-  const minute = m[5] != null ? Number(m[5]) : 0;
+function buildDate(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second = 0,
+): Date | null {
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  const d = new Date(year, month - 1, day, hour, minute);
+  const d = new Date(year, month - 1, day, hour, minute, second);
   // Guard against rollover (e.g. 32/02/26 producing a March date).
   if (d.getDate() !== day || d.getMonth() !== month - 1) return null;
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export function parseHuckleberryDate(raw: string): Date | null {
+  const t = raw.trim();
+  // Year-first is unambiguous (4-digit year) and is what current exports use.
+  const iso = ISO_DATE_RE.exec(t);
+  if (iso)
+    return buildDate(
+      Number(iso[1]),
+      Number(iso[2]),
+      Number(iso[3]),
+      iso[4] != null ? Number(iso[4]) : 0,
+      iso[5] != null ? Number(iso[5]) : 0,
+      iso[6] != null ? Number(iso[6]) : 0,
+    );
+  const dmy = DMY_DATE_RE.exec(t);
+  if (!dmy) return null;
+  let year = Number(dmy[3]);
+  if (year < 100) year += year < 70 ? 2000 : 1900;
+  return buildDate(
+    year,
+    Number(dmy[2]),
+    Number(dmy[1]),
+    dmy[4] != null ? Number(dmy[4]) : 0,
+    dmy[5] != null ? Number(dmy[5]) : 0,
+    dmy[6] != null ? Number(dmy[6]) : 0,
+  );
 }
 
 // --- Measurements ------------------------------------------------------------
@@ -154,6 +194,26 @@ const FACTORS: Record<MeasureKind, Record<string, number>> = {
     in: CM_PER_IN,
     inch: CM_PER_IN,
     inches: CM_PER_IN,
+    ft: 12 * CM_PER_IN,
+    feet: 12 * CM_PER_IN,
+  },
+};
+
+/**
+ * Imperial compound units Huckleberry uses for growth: "7.46lbs.oz" is
+ * 7 lb + 4.6 oz, "1.63ft.in" is 1 ft + 6.3 in — the integer part is the
+ * large unit, the fractional part the small unit in tenths.
+ */
+const COMPOUND_UNITS: Record<MeasureKind, Record<string, { per: number; smallPerWhole: number }>> = {
+  ml: {},
+  kg: {
+    // "per" is the factor of the SMALL unit (oz), "smallPerWhole" how many
+    // of it make the large unit (lb).
+    'lb.oz': { per: KG_PER_LB / 16, smallPerWhole: 16 },
+    'lbs.oz': { per: KG_PER_LB / 16, smallPerWhole: 16 },
+  },
+  cm: {
+    'ft.in': { per: CM_PER_IN, smallPerWhole: 12 },
   },
 };
 
@@ -172,6 +232,13 @@ function extractMeasurement(raw: string | undefined, kind: MeasureKind): number 
   if (!Number.isFinite(value)) return null;
   const unit = m[2].trim().toLowerCase();
   if (!unit) return value; // no suffix → assume metric
+  const compound = COMPOUND_UNITS[kind][unit];
+  if (compound) {
+    const whole = Math.trunc(value);
+    const small = Math.round((value - whole) * 100) / 10; // 0.46 → 4.6
+    // Total the small units, then convert: 7 lb 4.6 oz → 116.6 oz; 1 ft 6.3 in → 18.3 in.
+    return (whole * compound.smallPerWhole + small) * compound.per;
+  }
   const factor = FACTORS[kind][unit];
   return factor == null ? null : value * factor;
 }
@@ -179,6 +246,22 @@ function extractMeasurement(raw: string | undefined, kind: MeasureKind): number 
 // --- Row mapping -------------------------------------------------------------
 
 const HEADER_COLUMNS = ['type', 'start', 'end', 'start condition', 'start location', 'end condition', 'notes'];
+
+/** "00:10R" / "12:30L" — nursing side + duration in minutes:seconds. */
+const NURSE_SIDE_RE = /^(\d{1,3}):(\d{2})\s*([LRlr])$/;
+function parseNurseSide(raw: string): { min: number; side: 'left' | 'right' } | null {
+  const m = NURSE_SIDE_RE.exec(raw.trim());
+  if (!m) return null;
+  return {
+    min: Number(m[1]) * 60 + Number(m[2]),
+    side: m[3].toLowerCase() === 'l' ? 'left' : 'right',
+  };
+}
+
+/** Stool colors Huckleberry records (in the Duration column for diapers). */
+const STOOL_COLORS = new Set([
+  'black', 'brown', 'yellow', 'green', 'white', 'red', 'orange', 'tan', 'grey', 'gray', 'blue', 'pink', 'clear',
+]);
 
 function mapRow(line: number, cols: Record<string, string>): HuckleberryRow {
   const type = cols['type'] ?? '';
@@ -188,6 +271,9 @@ function mapRow(line: number, cols: Record<string, string>): HuckleberryRow {
   const startLoc = (cols['start location'] ?? '').trim();
   const endCond = (cols['end condition'] ?? '').trim();
   const notes = (cols['notes'] ?? '').trim();
+  // Optional column (present in current 9-column exports). For diapers it
+  // carries the stool color; for feeds the total nursing duration.
+  const duration = (cols['duration'] ?? '').trim();
 
   const start = parseHuckleberryDate(startRaw);
   if (!start) return { line, error: `Unreadable start time “${startRaw || '∅'}”` };
@@ -211,6 +297,22 @@ function mapRow(line: number, cols: Record<string, string>): HuckleberryRow {
     }
     case 'feed': {
       ev.type = 'feed';
+      const sideStart = parseNurseSide(startCond);
+      const sideEnd = endCond ? parseNurseSide(endCond) : null;
+      if (sideStart || sideEnd) {
+        // Nursing with per-side durations, e.g. "00:10R" (+ "00:10L").
+        ev.feed_method = 'nursing';
+        if (sideStart && sideEnd) {
+          ev.feed_side = 'both';
+          ev.feed_side_duration_min = Math.round((sideStart.min + sideEnd.min) / 2);
+        } else {
+          const s = sideStart ?? sideEnd!;
+          ev.feed_side = s.side;
+          ev.feed_side_duration_min = s.min;
+        }
+        if (startLoc) noteBits.push(startLoc);
+        break;
+      }
       const method: CareEvent['feed_method'] = /bottle/i.test(startLoc)
         ? 'bottle'
         : /breast|nursing/i.test(startLoc)
@@ -225,6 +327,8 @@ function mapRow(line: number, cols: Record<string, string>): HuckleberryRow {
         noteBits.push(endCond);
       }
       if (startLoc && !method) noteBits.push(startLoc);
+      // Milk type for bottles ("Breast Milk", "Formula").
+      if (startCond && method === 'bottle') noteBits.push(startCond);
       break;
     }
     case 'pump': {
@@ -238,13 +342,32 @@ function mapRow(line: number, cols: Record<string, string>): HuckleberryRow {
     }
     case 'diaper': {
       ev.type = 'diaper';
-      const text = `${startCond} ${notes}`.toLowerCase();
-      const wet = /wet|pee|urine/.test(text);
-      const dirty = /dirty|soil|stool|poop|bowel/.test(text);
+      // The wet/soiled marker ("Poo:medium", "Pee:large", "Both, pee:… poo:…")
+      // lives in the End Condition column in current exports; fall back to the
+      // other columns so a reordered export still maps.
+      const marker = [endCond, notes, startLoc].join(' ').toLowerCase();
+      const wet = /pee|urine|wet|piss/.test(marker);
+      const dirty = /poo|poop|stool|bowel|dirty|soil|crap/.test(marker);
       if (wet && dirty) ev.diaper_type = 'mixed';
       else if (dirty) ev.diaper_type = 'dirty';
       else if (wet) ev.diaper_type = 'wet';
-      if (startCond) noteBits.push(startCond);
+      const hasStool = ev.diaper_type === 'dirty' || ev.diaper_type === 'mixed';
+      // Stool color is recorded in the Duration column by Huckleberry.
+      if (duration && STOOL_COLORS.has(duration.toLowerCase())) {
+        if (hasStool) ev.stool_color = duration.toLowerCase();
+        else noteBits.push(duration);
+      } else if (duration) {
+        noteBits.push(duration);
+      }
+      // Consistency ("Loose", "Solid", …) is in the Start Condition column.
+      if (startCond) {
+        if (hasStool) ev.stool_consistency = startCond;
+        else noteBits.push(startCond);
+      }
+      if (startLoc) noteBits.push(startLoc); // e.g. "Diaper rash"
+      // Keep the raw marker so the stool size ("Poo:large") isn't lost — the
+      // app has no dedicated size field.
+      if (endCond) noteBits.push(endCond);
       break;
     }
     case 'growth': {
@@ -305,7 +428,9 @@ export function parseHuckleberry(text: string): HuckleberryParse {
   for (let i = headerIdx + 1; i < grid.length; i++) {
     const cells = grid[i];
     const cols: Record<string, string> = {};
-    for (const name of HEADER_COLUMNS) cols[name] = (cells[colIdx[name]] ?? '').trim();
+    // Copy every recognized column (not just the required set) so optional
+    // ones like "duration" are available when present.
+    for (const [name, j] of Object.entries(colIdx)) cols[name] = (cells[j] ?? '').trim();
     if (!cells.some((c) => c.trim() !== '')) continue;
     const row = mapRow(i + 1, cols);
     rows.push(row);
