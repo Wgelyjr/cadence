@@ -212,8 +212,9 @@ Put your LLM endpoint in the root `.env`:
 ```
 BARRY_BASE_URL=...
 BARRY_API_KEY=...
-BARRY_MODEL=...
 ```
+
+`BARRY_MODEL` is optional. When empty, Barry uses the model the server serves (found via `GET /models`). Set it to pick one model on a multi-model server.
 
 Then run `make deploy-barry`. Any OpenAI-compatible endpoint works. This includes a local server (Ollama, LM Studio, vLLM).
 
@@ -296,11 +297,11 @@ You do not need Docker.
    supabase functions deploy barry --no-verify-jwt
    supabase secrets set \
      BARRY_BASE_URL="https://api.openai.com/v1" \
-     BARRY_API_KEY="sk-..." \
-     BARRY_MODEL="gpt-4o-mini"
+     BARRY_API_KEY="sk-..."
    ```
 
    - Any OpenAI-compatible `BARRY_BASE_URL` works (example: Ollama at `http://host:11434/v1`).
+   - `BARRY_MODEL` is optional. When unset, Barry uses the model the server serves. Set it to pick one model on a multi-model server.
    - `BARRY_EMBEDDING_MODEL` is optional (example: `text-embedding-3-small`). Without it, Barry uses keyword search over the corpus. With it, the function fills in the corpus embeddings on first use. The column is `vector(384)`. If your model uses another size, recreate the column to match.
    - `BARRY_SEARXNG_URL` is optional. Set it to a reachable SearXNG instance if you want Barry to search the web. If SearXNG is not reachable, Barry answers from the corpus and the recorded data, and it says so.
 5. Rebuild the app so the new values go into the bundle:
@@ -338,7 +339,7 @@ Settings (function secrets):
 |---|---|
 | `BARRY_BASE_URL` | The LLM API base URL |
 | `BARRY_API_KEY` | The LLM API key |
-| `BARRY_MODEL` | The model name |
+| `BARRY_MODEL` | Optional. The model name. When unset, Barry uses the model the server serves |
 | `BARRY_SEARXNG_URL` | The SearXNG instance (default: `http://searxng:8080`) |
 | `BARRY_EMBEDDING_MODEL` | Optional. The embedding model |
 

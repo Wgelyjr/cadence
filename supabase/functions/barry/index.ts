@@ -16,7 +16,10 @@
 // Secrets (set with `supabase secrets set`):
 //   BARRY_BASE_URL        e.g. https://api.openai.com/v1  (any OpenAI-compatible)
 //   BARRY_API_KEY         API key for that endpoint
-//   BARRY_MODEL           e.g. gpt-4o-mini
+//   BARRY_MODEL           optional. The model to request. When unset, Barry
+//                         asks the server (GET /models) which model it serves
+//                         and uses that — swap the model on the server and
+//                         Barry follows within a minute.
 //   BARRY_SEARXNG_URL     optional SearXNG base URL for web search + citations;
 //                         defaults to http://searxng:8080 (this stack's searxng
 //                         service). If it is unreachable, Barry falls back to
@@ -187,20 +190,45 @@ async function retrieve(
     .map((x) => x.r);
 }
 
+/**
+ * Model name to request. A pinned BARRY_MODEL always wins (use it to pick
+ * one model on a multi-model server). When unset, discover the model from
+ * the server's /models endpoint (first entry) and cache the answer for 60 s,
+ * so a single-model server (Ollama, llama.cpp, vLLM) can serve whatever it
+ * has loaded without configuration.
+ */
+let discoveredModel: string | null = null;
+let discoveredAt = 0;
+
+async function resolveModel(baseUrl: string, apiKey: string): Promise<string> {
+  const pinned = Deno.env.get("BARRY_MODEL");
+  if (pinned) return pinned;
+  if (discoveredModel && Date.now() - discoveredAt < 60_000) return discoveredModel;
+  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/models`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (!res.ok) throw new Error(`the /models endpoint answered ${res.status}`);
+  const data = (await res.json()) as { data?: { id?: string }[] };
+  const id = data.data?.[0]?.id;
+  if (!id) throw new Error("the server listed no models");
+  discoveredModel = id;
+  discoveredAt = Date.now();
+  return id;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return jsonError(405, "Use POST");
 
   const baseUrl = Deno.env.get("BARRY_BASE_URL");
   const apiKey = Deno.env.get("BARRY_API_KEY");
-  const model = Deno.env.get("BARRY_MODEL") || "gpt-4o-mini";
   const embedModel = Deno.env.get("BARRY_EMBEDDING_MODEL") || null;
   const searxngBase = Deno.env.get("BARRY_SEARXNG_URL") || "http://searxng:8080";
 
   if (!baseUrl || !apiKey) {
     return jsonError(
       503,
-      "Barry is not configured yet. Set the BARRY_BASE_URL, BARRY_API_KEY and BARRY_MODEL secrets on the `barry` edge function (any OpenAI-compatible endpoint).",
+      "Barry is not configured yet. Set the BARRY_BASE_URL and BARRY_API_KEY secrets on the `barry` edge function (any OpenAI-compatible endpoint). BARRY_MODEL is optional — when unset, Barry uses the model the server is serving.",
     );
   }
 
@@ -263,6 +291,13 @@ Deno.serve(async (req) => {
     { role: "system", content: systemPrompt },
     ...messages.map((m) => ({ role: m.role, content: m.content })),
   ];
+
+  let model: string;
+  try {
+    model = await resolveModel(baseUrl, apiKey);
+  } catch (err) {
+    return jsonError(502, `Could not determine the LLM model: ${String(err)}`);
+  }
 
   try {
     const res = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
