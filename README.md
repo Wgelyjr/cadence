@@ -48,7 +48,7 @@ Settings: the profile, sync, and Barry.
 
 - Offline first: the data lives in IndexedDB on the phone. The app works with no backend and no network.
 - Multi-child: switch between babies. All data is per-child.
-- SweetSpot: suggests the next nap and bedtime windows. It uses the baby's age and the sleep you recorded. It is a starting point, not medical advice.
+- Rhythm: shows how long it has been since the last entry of each type. It compares feeds, naps, and diapers to the typical interval for the baby's age. It is a starting point, not medical advice.
 - Today dashboard: the totals for sleep, feeds, and diapers, and the timeline for the day.
 - History: the full timeline grouped by day, in your local time.
 - Data ownership: export a child as JSON or CSV. Delete an entry, a child (its data is deleted too), or all of your data.
@@ -351,8 +351,8 @@ If the function is not configured, it returns an error (503). The rest of the ap
 ```
 src/
   lib/          types, config, IndexedDB, store (Zustand), sync,
-                SweetSpot, Barry client, export utils
-  components/   layout, child switcher, event form/card, SweetSpot, stats
+                rhythm, Barry client, export utils
+  components/   layout, child switcher, event form/card, rhythm card, stats
   pages/        Onboarding, Today, Log, Timeline, Barry, Settings
 supabase/
   migrations/   0001_init.sql, 0002_barry_corpus.sql, 0003_custom_events.sql
