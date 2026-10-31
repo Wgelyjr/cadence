@@ -27,7 +27,7 @@ const HOURS = [
 interface Props {
   /** Events to draw (already filtered to the child and, if wanted, the type). */
   events: CareEvent[];
-  /** Monday 00:00 of the week to show. */
+  /** 00:00 of the first day of the 7-day window to show. */
   weekStart: Date;
   /** Custom type id → color (events only carry the type id, not the color). */
   customColors: Record<string, string>;
@@ -64,7 +64,7 @@ export default function WeekChart({ events, weekStart, customColors, selectedId,
 
       {events.length === 0 ? (
         <p className="rounded-lg bg-slate-50 py-6 text-center text-xs text-slate-400 dark:bg-slate-800/60 dark:text-slate-500">
-          Nothing logged this week.
+          Nothing logged in the last 7 days.
         </p>
       ) : (
         <div className="space-y-1">

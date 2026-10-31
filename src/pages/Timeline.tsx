@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
-import { addDays, format, isSameDay, startOfWeek } from 'date-fns';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { addDays, format, isSameYear, startOfDay, subDays } from 'date-fns';
+import { X } from 'lucide-react';
 import EditEventModal from '../components/EditEventModal';
 import EventCard from '../components/EventCard';
+import { CustomTypeIcon } from '../components/CustomTypeIcon';
+import FeedStats24 from '../components/FeedStats24';
 import WeekChart, { TYPE_COLOR } from '../components/WeekChart';
 import { useAppStore } from '../lib/store';
 import { useSettings, visiblePickerIds } from '../lib/settings';
@@ -10,6 +12,9 @@ import { EVENT_TYPE_META } from '../lib/types';
 import type { BuiltinEventType, CareEvent } from '../lib/types';
 
 const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+
+/** How many cards to mount per batch of the full-history list. */
+const LIST_CHUNK = 50;
 
 /** Filter key for an event: its built-in type id, or the custom type id. */
 function typeKey(e: CareEvent): string {
@@ -19,11 +24,14 @@ function typeKey(e: CareEvent): string {
 function Chip({
   label,
   color,
+  icon,
   active,
   onClick,
 }: {
   label: string;
   color?: string;
+  /** Custom-type icon name; replaces the color dot when present. */
+  icon?: string;
   active: boolean;
   onClick: () => void;
 }) {
@@ -38,12 +46,14 @@ function Chip({
       }`}
       style={active ? { background: color ?? '#4f46e5' } : undefined}
     >
-      {color && (
+      {icon ? (
+        <CustomTypeIcon icon={icon} size={12} style={{ color: active ? '#fff' : color }} />
+      ) : color ? (
         <span
           className="h-2 w-2 rounded-full"
           style={{ background: active ? 'rgba(255,255,255,0.9)' : color }}
         />
-      )}
+      ) : null}
       {label}
     </button>
   );
@@ -57,10 +67,27 @@ export default function Timeline() {
   const hiddenTypes = useSettings((s) => s.hiddenTypes);
   const customTypes = useSettings((s) => s.customTypes);
 
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
+  // Sliding 7-day window ending today. Keyed on the calendar day so the
+  // value is stable across renders but refreshes at midnight.
+  const dayKey = format(new Date(), 'yyyy-MM-dd');
+  const windowStart = useMemo(() => subDays(startOfDay(new Date()), 6), [dayKey]);
+  const windowEnd = addDays(windowStart, 6);
   const [filter, setFilter] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<CareEvent | null>(null);
+
+  // The full list is one card per entry (~1k+). Mounting it all at once
+  // freezes the tab, so the chart, chips and header paint first (next frame)
+  // and the cards mount in small batches: the initial batch right away, then
+  // more as the user scrolls toward the bottom.
+  const [listReady, setListReady] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setListReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const [shown, setShown] = useState(LIST_CHUNK);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const customById = useMemo(() => new Map(customTypes.map((c) => [c.id, c])), [customTypes]);
   const customColors = useMemo(
@@ -76,16 +103,14 @@ export default function Timeline() {
     [events, activeId],
   );
 
-  const isThisWeek = isSameDay(weekStart, startOfWeek(new Date(), { weekStartsOn: 1 }));
-
   const weekEvents = useMemo(() => {
-    const start = weekStart.getTime();
+    const start = windowStart.getTime();
     const end = start + MS_PER_WEEK;
     return mine.filter((e) => {
       const t = new Date(e.start_time).getTime();
       return t >= start && t < end && (filter === 'all' || typeKey(e) === filter);
     });
-  }, [mine, weekStart, filter]);
+  }, [mine, windowStart, filter]);
 
   const listEvents = filter === 'all' ? mine : mine.filter((e) => typeKey(e) === filter);
 
@@ -116,43 +141,47 @@ export default function Timeline() {
     g.items.push(e);
   }
 
+  // Only the first `shown` cards (in newest-first order) are mounted; the rest
+  // appear when the sentinel near the bottom comes close to the viewport.
+  const allShown = shown >= listEvents.length;
+  const shownGroups: Array<{ date: string; items: CareEvent[] }> = [];
+  let remaining = shown;
+  for (const g of groups) {
+    if (remaining <= 0) break;
+    const items = g.items.length > remaining ? g.items.slice(0, remaining) : g.items;
+    shownGroups.push({ date: g.date, items });
+    remaining -= items.length;
+  }
+
+  useEffect(() => {
+    setShown(LIST_CHUNK);
+  }, [filter]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || allShown) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setShown((s) => s + LIST_CHUNK);
+      },
+      { rootMargin: '600px 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [listReady, allShown, shown]);
+
   return (
     <div className="animate-fade-in space-y-4">
       <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">History</h1>
 
-      {/* Week navigation */}
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={() => setWeekStart(addDays(weekStart, -7))}
-          aria-label="Previous week"
-          className="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <div className="flex items-baseline gap-2">
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {format(weekStart, 'MMM d')} – {format(addDays(weekStart, 6), 'MMM d, yyyy')}
-          </p>
-          {!isThisWeek && (
-            <button
-              type="button"
-              onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}
-              className="text-xs font-medium text-brand-600 hover:underline dark:text-brand-400"
-            >
-              This week
-            </button>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => setWeekStart(addDays(weekStart, 7))}
-          aria-label="Next week"
-          className="rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-        >
-          <ChevronRight size={18} />
-        </button>
-      </div>
+      {/* Sliding window: always the 7 days ending today. */}
+      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+        Last 7 days
+        <span className="ml-1.5 font-normal text-slate-400 dark:text-slate-500">
+          · {format(windowStart, 'MMM d')} –{' '}
+          {format(windowEnd, isSameYear(windowStart, windowEnd) ? 'MMM d' : 'MMM d, yyyy')}
+        </span>
+      </p>
 
       {/* Type filter chips */}
       <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4">
@@ -162,17 +191,21 @@ export default function Timeline() {
             key={id}
             label={chipLabel(id)}
             color={chipColor(id)}
+            icon={customById.get(id)?.icon}
             active={filter === id}
             onClick={() => setFilter(filter === id ? 'all' : id)}
           />
         ))}
       </div>
 
+      {/* Feeding totals for the last 24 hours (hidden when nothing fed) */}
+      <FeedStats24 />
+
       {/* Week chart */}
       <div className="rounded-xl bg-white p-3 shadow-card dark:bg-slate-900">
         <WeekChart
           events={weekEvents}
-          weekStart={weekStart}
+          weekStart={windowStart}
           customColors={customColors}
           selectedId={selectedId}
           onSelect={(e) => setSelectedId(e.id === selectedId ? null : e.id)}
@@ -209,18 +242,21 @@ export default function Timeline() {
             {filter === 'all' ? 'No entries yet.' : 'No entries of this type.'}
           </p>
         )}
-        {groups.map((g) => (
-          <div key={g.date} className="mb-4">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-              {format(new Date(g.date), 'EEEE, MMM d')}
-            </h3>
-            <div className="space-y-2">
-              {g.items.map((e) => (
-                <EventCard key={e.id} event={e} onDelete={removeEvent} onEdit={setEditing} />
-              ))}
+        {listReady &&
+          shownGroups.map((g) => (
+            <div key={g.date} className="mb-4">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                {format(new Date(g.date), 'EEEE, MMM d')}
+              </h3>
+              <div className="space-y-2">
+                {g.items.map((e) => (
+                  <EventCard key={e.id} event={e} onDelete={removeEvent} onEdit={setEditing} />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        {/* Grows the list by another batch as this gets near the viewport. */}
+        {listReady && !allShown && <div ref={sentinelRef} className="h-8" aria-hidden />}
       </section>
 
       <EditEventModal event={editing} onClose={() => setEditing(null)} />
