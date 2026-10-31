@@ -83,6 +83,7 @@ You get:
 | Supabase Studio | http://localhost:8000 (user/password in `docker/supabase/.env`) |
 | API gateway (kong) | http://localhost:8000 |
 | Postgres (via pooler) | localhost:5432 (user `postgres`) |
+| SearXNG (Barry's web search) | http://localhost:8888 (`SEARXNG_PORT` in root `.env`) |
 
 What `make setup` does:
 
@@ -118,6 +119,13 @@ make reset         # stop + destroy all local data
 including local Ollama/LM Studio/vLLM), then `make setup` again (or
 `make deploy-barry`). Without it, the app is fully usable and Barry shows
 an offline notice.
+
+Barry also grounds general answers in live web search and cites its
+sources: the `searxng` container (JSON API, limiter off —
+`docker/searxng/settings.yml`) runs with the stack and the edge function
+queries it at `http://searxng:8080`. Point `BARRY_SEARXNG_URL` in the root
+`.env` at a different instance if you have one; if SearXNG is down, Barry
+silently falls back to notes + recorded data.
 
 **How the env files work:** Docker Compose interpolates `${VAR}` from the
 **project root's `.env` only** — it does not read `docker/supabase/.env`.

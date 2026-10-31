@@ -1,0 +1,19 @@
+# SearXNG — metasearch backing Barry's web grounding.
+#
+# Barry's edge function queries /search?format=json. Only the deviations
+# from SearXNG's defaults are set here:
+#   - JSON output format (off by default)
+#   - limiter off — the only client is our own edge function, and the
+#     limiter blocks non-browser clients
+#   - fixed secret_key (local-only instance, no anonymous users)
+
+use_default_settings: true
+
+server:
+  secret_key: "babyapp-local-searxng-not-for-production"
+  limiter: false
+
+search:
+  formats:
+    - html
+    - json

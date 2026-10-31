@@ -25,7 +25,7 @@ END="# --- END stack env (managed) ---"
 #    BARRY_* is deliberately NOT mirrored into the managed block below — the
 #    client section of the root .env is the single source for them.
 root_val() { grep -E "^$1=" "$ROOT_ENV" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' || true; }
-for k in BARRY_BASE_URL BARRY_API_KEY BARRY_MODEL BARRY_EMBEDDING_MODEL; do
+for k in BARRY_BASE_URL BARRY_API_KEY BARRY_MODEL BARRY_EMBEDDING_MODEL BARRY_SEARXNG_URL; do
   v=$(root_val "$k")
   [ -n "$v" ] || continue
   if grep -qE "^$k=" "$SBU_ENV"; then
@@ -51,7 +51,7 @@ awk -v begin="$BEGIN" -v end="$END" '
   awk '
     match($0, /^[A-Za-z_][A-Za-z0-9_]*=/) {
       k = $0; sub(/=.*/, "", k)
-      if (k ~ /^BARRY_(BASE_URL|API_KEY|MODEL|EMBEDDING_MODEL)$/) next
+      if (k ~ /^BARRY_(BASE_URL|API_KEY|MODEL|EMBEDDING_MODEL|SEARXNG_URL)$/) next
       if (!(k in val)) order[++n] = k
       val[k] = $0
     }

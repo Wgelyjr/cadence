@@ -8,13 +8,19 @@
 // Pipeline:
 //   1. Retrieve relevant notes from `barry_corpus` — vector search when
 //      embeddings are configured (BARRY_EMBEDDING_MODEL), keyword search otherwise.
-//   2. Build a system prompt from the retrieved notes + the child's context.
-//   3. Stream the completion from a configurable OpenAI-compatible endpoint.
+//   2. Web-search the question via SearXNG (BARRY_SEARXNG_URL; defaults to
+//      the `searxng` service of this compose stack at http://searxng:8080).
+//   3. Build a system prompt from the notes, the web results and the child's context.
+//   4. Stream the completion from a configurable OpenAI-compatible endpoint.
 //
 // Secrets (set with `supabase secrets set`):
 //   BARRY_BASE_URL        e.g. https://api.openai.com/v1  (any OpenAI-compatible)
 //   BARRY_API_KEY         API key for that endpoint
 //   BARRY_MODEL           e.g. gpt-4o-mini
+//   BARRY_SEARXNG_URL     optional SearXNG base URL for web search + citations;
+//                         defaults to http://searxng:8080 (this stack's searxng
+//                         service). If it is unreachable, Barry falls back to
+//                         notes + recorded data and says so.
 //   BARRY_EMBEDDING_MODEL optional, e.g. text-embedding-3-small (384-dim rows
 //                         are expected for the seed corpus; if your embedding
 //                         model uses a different dimension, drop/recreate the
@@ -43,12 +49,14 @@ function jsonError(status: number, message: string) {
 const SYSTEM_BASE = `You are Barry, the friendly assistant inside BabyApp, a baby care tracker.
 
 Ground rules:
-- You answer ONLY from: (a) the reference notes provided below, and (b) the caregiver's own recorded data summary provided below. Do not invent facts, dosages or numbers that are not in those notes.
+- You answer from three sources: (a) the reference notes below, (b) the caregiver's recorded data below, and (c) the web search results below. Do not invent facts, dosages or numbers.
+- For anything general about babies (care, feeding, sleep, health, development), use the web search results as your source — do not answer general questions from memory. The recorded data is only about this caregiver's own child.
+- When you use web search results, end the answer with a "Sources:" line holding at most 3 markdown links, like: Sources: [Title](url). One line only.
 - BabyApp is a care-tracking tool, NOT a medical service. Never diagnose, prescribe or tell a caregiver to start/stop any medication. If a question needs medical judgment, say clearly that they should talk to their own doctor or a health professional.
 - End answers with a one-line reminder that this is general information, not medical advice, only when the topic is health-related.
 - Be warm, concise and practical. Use short paragraphs or bullets. Match the caregiver's language.
 - Format your answer in GitHub-flavoured markdown: use **bold** for key points, bullet lists for steps or signs, and short paragraphs. The app renders markdown, so do not use raw HTML.
-- If the notes do not cover the question, say so plainly and suggest what to track or whom to ask.`;
+- If none of the sources cover the question, say so plainly and suggest what to track or whom to ask.`;
 
 async function embedText(text: string, model: string): Promise<number[] | null> {
   const base = Deno.env.get("BARRY_BASE_URL");
@@ -107,6 +115,37 @@ async function topUpEmbeddings(supabase: any, model: string): Promise<void> {
   }
 }
 
+/**
+ * Web search via a SearXNG instance (JSON API). Returns at most `n`
+ * results, each with a short content snippet. Any failure (missing or slow
+ * SearXNG, bad response) returns [] — Barry then degrades to notes +
+ * recorded data instead of erroring.
+ */
+async function webSearch(
+  base: string,
+  query: string,
+  n = 5,
+): Promise<{ title: string; url: string; content: string }[]> {
+  try {
+    const url =
+      `${base.replace(/\/$/, "")}/search?format=json&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) return [];
+    const j: any = await res.json();
+    const results: any[] = Array.isArray(j?.results) ? j.results : [];
+    return results
+      .slice(0, n)
+      .map((r) => ({
+        title: String(r?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 150),
+        url: String(r?.url ?? ""),
+        content: String(r?.content ?? "").replace(/\s+/g, " ").trim().slice(0, 400),
+      }))
+      .filter((r) => r.url);
+  } catch {
+    return [];
+  }
+}
+
 /** Vector search with keyword fallback. */
 async function retrieve(
   supabase: any,
@@ -152,6 +191,7 @@ Deno.serve(async (req) => {
   const apiKey = Deno.env.get("BARRY_API_KEY");
   const model = Deno.env.get("BARRY_MODEL") || "gpt-4o-mini";
   const embedModel = Deno.env.get("BARRY_EMBEDDING_MODEL") || null;
+  const searxngBase = Deno.env.get("BARRY_SEARXNG_URL") || "http://searxng:8080";
 
   if (!baseUrl || !apiKey) {
     return jsonError(
@@ -181,6 +221,7 @@ Deno.serve(async (req) => {
   // Retrieval (embeddings are optional; top-up runs quietly in the background).
   if (embedModel) void topUpEmbeddings(supabase, embedModel);
   const notes = await retrieve(supabase, query, embedModel);
+  const web = await webSearch(searxngBase, query);
 
   const childLine = [
     ctx.name && `Child: ${ctx.name}`,
@@ -196,7 +237,12 @@ Deno.serve(async (req) => {
     "=== REFERENCE NOTES ===",
     notes.length
       ? notes.map((n) => `[${n.topic}] ${n.title}\n${n.body}`).join("\n\n")
-      : "(no matching notes — answer conservatively from general knowledge of your role, or say the notes don't cover it)",
+      : "(no matching notes — rely on the web search results and the recorded data)",
+    "",
+    "=== WEB SEARCH RESULTS ===",
+    web.length
+      ? web.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.content}`).join("\n\n")
+      : "(web search returned nothing — answer only from the notes and recorded data)",
     "",
     "=== CAREGIVER CONTEXT ===",
     childLine || "(no child context)",

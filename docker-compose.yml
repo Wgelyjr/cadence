@@ -13,7 +13,8 @@
 # sync always runs.
 #
 # Ports (override in .env): WEB_PORT (app, default 8088),
-# KONG_HTTP_PORT (API gateway, default 8000), POSTGRES_PORT (5432).
+# KONG_HTTP_PORT (API gateway, default 8000), POSTGRES_PORT (5432),
+# SEARXNG_PORT (Barry's web search, default 8888).
 
 name: babyapp
 
@@ -44,3 +45,20 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+  searxng:
+    # Metasearch that Barry's edge function queries for web grounding
+    # (JSON API + limiter off, see docker/searxng/settings.yml). Reachable
+    # from the edge runtime as http://searxng:8080 (shared network).
+    container_name: babyapp-searxng
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    volumes:
+      - ./docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    ports:
+      - ${SEARXNG_PORT:-8888}:8080
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8080/healthz\", timeout=5)'"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s

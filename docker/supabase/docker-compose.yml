@@ -481,6 +481,7 @@ services:
       BARRY_API_KEY: ${BARRY_API_KEY:-}
       BARRY_MODEL: ${BARRY_MODEL:-gpt-4o-mini}
       BARRY_EMBEDDING_MODEL: ${BARRY_EMBEDDING_MODEL:-}
+      BARRY_SEARXNG_URL: ${BARRY_SEARXNG_URL:-}
     command:
       [
         "start",
