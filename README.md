@@ -1,11 +1,11 @@
-# BabyApp
+# Cadence
 
 Track everything your baby needs — sleep, feeds, diapers, growth, milestones,
 solid foods, and (when you're closer to due date) labor contractions.
-BabyApp is an **installable, offline-first PWA**: it works fully on-device,
+Cadence is an **installable, offline-first PWA**: it works fully on-device,
 and syncs across phones and caregivers when you connect a backend.
 
-> BabyApp is a care-tracking tool, not a medical device and not a medical
+> Cadence is a care-tracking tool, not a medical device and not a medical
 > service. Nothing in it is medical advice — for anything health-related,
 > talk to your own doctor or a health professional.
 
@@ -79,7 +79,7 @@ You get:
 
 | What         | Where |
 |--------------|-------|
-| BabyApp (installable PWA) | http://localhost:8088 |
+| Cadence (installable PWA) | http://localhost:8088 |
 | Supabase Studio | http://localhost:8000 (user/password in `docker/supabase/.env`) |
 | API gateway (kong) | http://localhost:8000 |
 | Postgres (via pooler) | localhost:5432 (user `postgres`) |

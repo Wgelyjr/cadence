@@ -63,7 +63,7 @@ function download(filename: string, content: string, mime: string) {
 
 export function exportJSON(children: Child[], events: CareEvent[], childName: string) {
   const payload = {
-    app: 'BabyApp',
+    app: 'Cadence',
     exported_at: nowIso(),
     version: 1,
     children,
@@ -71,7 +71,7 @@ export function exportJSON(children: Child[], events: CareEvent[], childName: st
   };
   const safe = (childName || 'baby').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   download(
-    `babyapp-${safe}-${new Date().toISOString().slice(0, 10)}.json`,
+    `cadence-${safe}-${new Date().toISOString().slice(0, 10)}.json`,
     JSON.stringify(payload, null, 2),
     'application/json',
   );
@@ -124,7 +124,7 @@ export function exportCSV(children: Child[], events: CareEvent[], childName: str
     );
   const safe = (childName || 'baby').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   download(
-    `babyapp-${safe}-${new Date().toISOString().slice(0, 10)}.csv`,
+    `cadence-${safe}-${new Date().toISOString().slice(0, 10)}.csv`,
     [header, ...rows].join('\n'),
     'text/csv',
   );

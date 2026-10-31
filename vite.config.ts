@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: 'BabyApp',
-        short_name: 'BabyApp',
+        name: 'Cadence',
+        short_name: 'Cadence',
         description:
           'Track everything your baby needs — sleep, feeds, diapers, growth and milestones. Offline-first, works across caregivers.',
         theme_color: '#4f46e5',

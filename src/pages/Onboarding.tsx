@@ -10,7 +10,7 @@ export default function Onboarding() {
           <Moon size={32} />
         </div>
         <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-          Welcome to BabyApp
+          Welcome to Cadence
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
           Track sleep, feeds, diapers and growth. It works fully offline on this
