@@ -109,6 +109,11 @@ export interface BarryMessage {
 export interface BarryChildContext {
   name?: string;
   ageWeeks?: number;
+  /** Compact human age, e.g. "5mo old". */
+  ageLabel?: string;
+  /** ISO birth date, e.g. "2026-03-14". */
+  birth_date?: string;
+  /** Multi-line digest of recent recorded data (24h, 7-day averages, growth…). */
   recentSummary?: string;
 }
 

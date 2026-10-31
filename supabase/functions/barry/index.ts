@@ -1,8 +1,8 @@
-// Barry — the BabyApp assistant (Supabase Edge Function).
+// Barry — the Cadence assistant (Supabase Edge Function).
 //
 // POST /functions/v1/barry
 //   Authorization: Bearer <anon or user key>
-//   Body: { messages: [{role, content}], child_context: {name?, ageWeeks?, recentSummary?} }
+//   Body: { messages: [{role, content}], child_context: {name?, ageWeeks?, ageLabel?, birth_date?, recentSummary?} }
 //   Response: OpenAI-style SSE stream of chat completion deltas.
 //
 // Pipeline:
@@ -46,13 +46,14 @@ function jsonError(status: number, message: string) {
   });
 }
 
-const SYSTEM_BASE = `You are Barry, the friendly assistant inside BabyApp, a baby care tracker.
+const SYSTEM_BASE = `You are Barry, the friendly assistant inside Cadence, a baby care tracker.
 
 Ground rules:
 - You answer from three sources: (a) the reference notes below, (b) the caregiver's recorded data below, and (c) the web search results below. Do not invent facts, dosages or numbers.
+- If the question is about the app itself (its name, purpose or features), answer directly from who you are: Barry inside Cadence, a local-first baby care tracker. Web results describe other software and do not apply.
 - For anything general about babies (care, feeding, sleep, health, development), use the web search results as your source — do not answer general questions from memory. The recorded data is only about this caregiver's own child.
 - When you use web search results, end the answer with a "Sources:" line holding at most 3 markdown links, like: Sources: [Title](url). One line only.
-- BabyApp is a care-tracking tool, NOT a medical service. Never diagnose, prescribe or tell a caregiver to start/stop any medication. If a question needs medical judgment, say clearly that they should talk to their own doctor or a health professional.
+- Cadence is a care-tracking tool, NOT a medical service. Never diagnose, prescribe or tell a caregiver to start/stop any medication. If a question needs medical judgment, say clearly that they should talk to their own doctor or a health professional.
 - End answers with a one-line reminder that this is general information, not medical advice, only when the topic is health-related.
 - Be warm, concise and practical. Use short paragraphs or bullets. Match the caregiver's language.
 - Format your answer in GitHub-flavoured markdown: use **bold** for key points, bullet lists for steps or signs, and short paragraphs. The app renders markdown, so do not use raw HTML.
@@ -223,13 +224,20 @@ Deno.serve(async (req) => {
   const notes = await retrieve(supabase, query, embedModel);
   const web = await webSearch(searxngBase, query);
 
-  const childLine = [
-    ctx.name && `Child: ${ctx.name}`,
-    typeof ctx.ageWeeks === "number" && `Age: ${ctx.ageWeeks} weeks`,
-    ctx.recentSummary && `Recorded data (last 48h): ${ctx.recentSummary}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const childLines: string[] = [];
+  if (ctx.name) childLines.push(`Child: ${ctx.name}`);
+  if (ctx.ageLabel || typeof ctx.ageWeeks === "number") {
+    const age = [
+      ctx.ageLabel,
+      typeof ctx.ageWeeks === "number" ? `(${ctx.ageWeeks} weeks)` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    childLines.push(`Age: ${age}`);
+  }
+  if (ctx.birth_date) childLines.push(`Born: ${ctx.birth_date}`);
+  if (ctx.recentSummary) childLines.push(`Recorded data (recent):\n${ctx.recentSummary}`);
+  const childLine = childLines.join("\n");
 
   const systemPrompt = [
     SYSTEM_BASE,

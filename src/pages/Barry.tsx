@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bot, Send, User } from 'lucide-react';
+import { format } from 'date-fns';
 import Markdown from '../components/Markdown';
 import { askBarry } from '../lib/barry';
 import { isBarryAvailable } from '../lib/config';
@@ -7,22 +8,130 @@ import { useAppStore } from '../lib/store';
 import type { BarryMessage, CareEvent } from '../lib/types';
 import { ageInWeeks, ageLabel } from '../lib/utils';
 
+const MS_H = 3600 * 1000;
+
+function fmtDur(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
+/** Nursing minutes of one feed: the duration is per side, so both counts twice. */
+function nursingMinutes(e: CareEvent): number {
+  const d = e.feed_side_duration_min ?? 0;
+  return e.feed_side === 'both' ? d * 2 : d;
+}
+
+function sleepMinutes(e: CareEvent): number {
+  if (!e.end_time) return 0;
+  return Math.max(0, (new Date(e.end_time).getTime() - new Date(e.start_time).getTime()) / 60000);
+}
+
+/**
+ * A compact digest of the recorded data, sent with every question so Barry
+ * can answer with real numbers: the last 24 hours in detail, 7-day
+ * averages, and the most recent growth, health and milestone entries.
+ */
 function buildSummary(events: CareEvent[], childId: string): string {
-  const cutoff = Date.now() - 48 * 3600 * 1000;
-  const recent = events.filter(
-    (e) =>
-      e.child_id === childId && !e.deleted && new Date(e.start_time).getTime() >= cutoff,
+  const now = Date.now();
+  const within = (hours: number) => (e: CareEvent) =>
+    now - new Date(e.start_time).getTime() <= hours * MS_H;
+  const mine = events.filter((e) => e.child_id === childId && !e.deleted);
+  const lines: string[] = [];
+
+  // Last 24 hours, by type.
+  const feeds = mine.filter((e) => e.type === 'feed' && within(24)(e));
+  const byMethod = (m: CareEvent['feed_method']) => feeds.filter((f) => f.feed_method === m);
+  const feedParts: string[] = [];
+  const nursing = byMethod('nursing');
+  if (nursing.length) {
+    const min = nursing.reduce((a, f) => a + nursingMinutes(f), 0);
+    feedParts.push(`${nursing.length} nursing${min ? ` (~${fmtDur(min)})` : ''}`);
+  }
+  const bottles = byMethod('bottle');
+  if (bottles.length) {
+    const ml = bottles.reduce((a, f) => a + (f.bottle_ml ?? 0), 0);
+    feedParts.push(`${bottles.length} bottle${ml ? ` (${ml} ml)` : ''}`);
+  }
+  const pumped = byMethod('pump');
+  if (pumped.length) {
+    const ml = pumped.reduce((a, f) => a + (f.pump_ml ?? 0), 0);
+    feedParts.push(`${pumped.length} pumped${ml ? ` (${ml} ml)` : ''}`);
+  }
+  const otherFeeds = feeds.length - nursing.length - bottles.length - pumped.length;
+  if (otherFeeds > 0) feedParts.push(`${otherFeeds} other feed`);
+
+  const sleeps = mine.filter((e) => e.type === 'sleep' && within(24)(e));
+  const sleepMin = sleeps.reduce((a, e) => a + sleepMinutes(e), 0);
+  const longestSleep = sleeps.reduce((a, e) => Math.max(a, sleepMinutes(e)), 0);
+  const diapers = mine.filter((e) => e.type === 'diaper' && within(24)(e));
+  const wet = diapers.filter((d) => d.diaper_type === 'wet').length;
+  const solids = mine.filter((e) => e.type === 'solid_food' && within(24)(e));
+
+  const segs: string[] = [];
+  if (feedParts.length) segs.push(feedParts.join(', '));
+  if (sleeps.length) segs.push(`${fmtDur(sleepMin)} sleep (longest ${fmtDur(longestSleep)})`);
+  if (diapers.length) segs.push(`${diapers.length} diapers (${wet} wet, ${diapers.length - wet} dirty)`);
+  if (solids.length) segs.push(`${solids.length} solid food session${solids.length > 1 ? 's' : ''}`);
+  lines.push(`Last 24h: ${segs.length ? segs.join('; ') : 'nothing logged'}.`);
+
+  // 7-day averages.
+  let feeds7 = 0;
+  let sleepH7 = 0;
+  let diapers7 = 0;
+  for (const e of mine) {
+    if (!within(24 * 7)(e)) continue;
+    if (e.type === 'feed') feeds7 += 1;
+    else if (e.type === 'sleep') sleepH7 += sleepMinutes(e) / 60;
+    else if (e.type === 'diaper') diapers7 += 1;
+  }
+  lines.push(
+    `7-day average: ${(feeds7 / 7).toFixed(1)} feeds/day, ${(sleepH7 / 7).toFixed(1)}h sleep/day, ${(diapers7 / 7).toFixed(1)} diapers/day.`,
   );
-  const sleeps = recent.filter((e) => e.type === 'sleep' && e.end_time);
-  const sleepH = Math.round(
-    sleeps.reduce(
-      (a, e) => a + (new Date(e.end_time!).getTime() - new Date(e.start_time).getTime()) / 3600000,
-      0,
-    ),
-  );
-  const feeds = recent.filter((e) => e.type === 'feed').length;
-  const diapers = recent.filter((e) => e.type === 'diaper').length;
-  return `Last 48h: ${sleeps.length} sleeps (~${sleepH}h total), ${feeds} feeds, ${diapers} diapers.`;
+
+  // Latest growth.
+  const growth = mine
+    .filter((e) => e.type === 'growth' && within(24 * 30)(e))
+    .sort((a, b) => b.start_time.localeCompare(a.start_time))[0];
+  if (growth) {
+    const bits = [
+      growth.height_cm != null ? `${growth.height_cm} cm` : '',
+      growth.weight_kg != null ? `${growth.weight_kg} kg` : '',
+      growth.head_cm != null ? `head ${growth.head_cm} cm` : '',
+    ].filter(Boolean);
+    if (bits.length) {
+      lines.push(`Latest growth (${format(new Date(growth.start_time), 'MMM d')}): ${bits.join(', ')}.`);
+    }
+  }
+
+  // Recent health entries (last 14 days).
+  const health = mine
+    .filter((e) => e.type === 'health' && within(24 * 14)(e))
+    .sort((a, b) => b.start_time.localeCompare(a.start_time))
+    .slice(0, 3)
+    .map((h) =>
+      [
+        h.temp_c != null ? `${h.temp_c} °C` : '',
+        h.medicine_name ? `medicine: ${h.medicine_name}${h.medicine_dose ? ` (${h.medicine_dose})` : ''}` : '',
+        h.note ?? '',
+      ]
+        .filter(Boolean)
+        .join(', '),
+    )
+    .filter(Boolean);
+  if (health.length) lines.push(`Recent health: ${health.join('; ')}.`);
+
+  // Recent milestones (last 30 days).
+  const milestones = mine
+    .filter((e) => e.type === 'milestone' && within(24 * 30)(e))
+    .sort((a, b) => b.start_time.localeCompare(a.start_time))
+    .slice(0, 3)
+    .map((m) => `${m.label || 'milestone'} (${format(new Date(m.start_time), 'MMM d')})`);
+  if (milestones.length) lines.push(`Milestones: ${milestones.join('; ')}.`);
+
+  return lines.join('\n');
 }
 
 export default function Barry() {
@@ -55,6 +164,8 @@ export default function Barry() {
       const ctx = {
         name: child.name,
         ageWeeks: ageInWeeks(child.birth_date),
+        ageLabel: ageLabel(child.birth_date),
+        birth_date: child.birth_date,
         recentSummary: buildSummary(events, child.id),
       };
       let acc = '';
