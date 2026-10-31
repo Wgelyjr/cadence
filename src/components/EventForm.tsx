@@ -217,6 +217,28 @@ export default function EventForm({ initial, onSaved }: Props) {
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  // Calendar date and time of day are separate fields, but the state keeps
+  // the combined "YYYY-MM-DDTHH:MM" string, so submit/edit paths are
+  // unchanged. An empty half is filled from the other half (end defaults
+  // to the start's date/time) so clearing a field never produces an
+  // invalid value.
+  const startDate = form.start_time.slice(0, 10);
+  const startTime = form.start_time.slice(11, 16);
+  const endDate = form.end_time ? form.end_time.slice(0, 10) : startDate;
+  const endTime = form.end_time ? form.end_time.slice(11, 16) : '';
+  function setStartDate(d: string) {
+    if (d) set('start_time', `${d}T${startTime}`);
+  }
+  function setStartTime(t: string) {
+    if (t) set('start_time', `${startDate}T${t}`);
+  }
+  function setEndDate(d: string) {
+    if (d) set('end_time', `${d}T${endTime || startTime}`);
+  }
+  function setEndTime(t: string) {
+    if (t) set('end_time', `${endDate}T${t}`);
+  }
+
   const selectedCustom = customById.get(selected);
   const useTimer =
     !selectedCustom &&
@@ -412,26 +434,42 @@ export default function EventForm({ initial, onSaved }: Props) {
         </div>
       )}
 
-      {/* Times */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Times — calendar date and time of day as separate fields */}
+      <div className="space-y-3">
         <div>
           <label className="label">Start</label>
-          <input
-            type="datetime-local"
-            className="field"
-            value={form.start_time}
-            onChange={(e) => set('start_time', e.target.value)}
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="date"
+              className="field"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+            <input
+              type="time"
+              className="field"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+            />
+          </div>
         </div>
         {selected !== 'contraction' && (
           <div>
             <label className="label">End</label>
-            <input
-              type="datetime-local"
-              className="field"
-              value={form.end_time}
-              onChange={(e) => set('end_time', e.target.value)}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="date"
+                className="field"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+              <input
+                type="time"
+                className="field"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+              />
+            </div>
           </div>
         )}
       </div>
