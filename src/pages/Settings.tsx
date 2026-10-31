@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  Activity,
   ChevronDown,
   ChevronUp,
   Cloud,
@@ -14,6 +15,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react';
 import ImportModal from '../components/ImportModal';
 import Modal from '../components/Modal';
@@ -22,7 +24,7 @@ import { getSupabase } from '../lib/supabase';
 import { useAppStore } from '../lib/store';
 import { useSettings, type Theme, type Units } from '../lib/settings';
 import type { Child, EventType } from '../lib/types';
-import { EVENT_TYPE_META } from '../lib/types';
+import { BUILTIN_EVENT_TYPES, EVENT_TYPE_META } from '../lib/types';
 import { ageLabel, exportCSV, exportJSON } from '../lib/utils';
 import { PALETTE } from '../components/AddChildForm';
 import { initials } from '../components/ChildSwitcher';
@@ -393,6 +395,106 @@ function LogDisplayCard() {
 }
 
 // ---------------------------------------------------------------------------
+// Home Rhythm entries (which "last…" entries show, in what order)
+// ---------------------------------------------------------------------------
+
+function RhythmEntriesCard() {
+  const rhythmOrder = useSettings((s) => s.rhythmOrder);
+  const customTypes = useSettings((s) => s.customTypes);
+  const addRhythmEntry = useSettings((s) => s.addRhythmEntry);
+  const removeRhythmEntry = useSettings((s) => s.removeRhythmEntry);
+  const moveRhythmEntry = useSettings((s) => s.moveRhythmEntry);
+  const customById = new Map(customTypes.map((c) => [c.id, c]));
+  const labelFor = (id: string) => customById.get(id)?.label ?? EVENT_TYPE_META[id as EventType].label;
+  const available = [...BUILTIN_EVENT_TYPES, ...customTypes.map((c) => c.id)].filter(
+    (id) => !rhythmOrder.includes(id),
+  );
+
+  return (
+    <Card title="Rhythm entries" icon={<Activity size={16} />}>
+      <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+        Choose which “when was the last…” entries appear on the home screen and in what order.
+      </p>
+      {rhythmOrder.length === 0 ? (
+        <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+          No entries — the home Rhythm card is hidden. Add one below.
+        </p>
+      ) : (
+        <div className="space-y-0.5">
+          {rhythmOrder.map((id, i) => {
+            const custom = customById.get(id);
+            const label = labelFor(id);
+            return (
+              <div key={id} className="flex items-center gap-1.5 rounded-lg px-1 py-1">
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    disabled={i === 0}
+                    onClick={() => moveRhythmEntry(id, -1)}
+                    className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                    aria-label={`Move ${label} up`}
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={i === rhythmOrder.length - 1}
+                    onClick={() => moveRhythmEntry(id, 1)}
+                    className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                    aria-label={`Move ${label} down`}
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                </div>
+                {custom ? (
+                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: custom.color }} />
+                ) : (
+                  <span className="h-3 w-3 shrink-0 rounded-full bg-slate-200 dark:bg-slate-700" />
+                )}
+                <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                  {label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeRhythmEntry(id)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/60 dark:hover:text-red-400"
+                  aria-label={`Remove ${label} from home`}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {available.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
+            Add
+          </span>
+          {available.map((id) => {
+            const custom = customById.get(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => addRhythmEntry(id)}
+                className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                {custom && (
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: custom.color }} />
+                )}
+                {labelFor(id)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Child management
 // ---------------------------------------------------------------------------
 
@@ -596,6 +698,7 @@ export default function Settings() {
       <SyncCard />
       <PreferencesCard />
       <LogDisplayCard />
+      <RhythmEntriesCard />
       <CustomEventsCard />
       <ChildrenCard />
       <DataCard />

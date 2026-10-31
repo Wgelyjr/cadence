@@ -30,6 +30,8 @@ interface SettingsData {
   logOrder: string[];
   /** Type ids hidden from the log picker. */
   hiddenTypes: string[];
+  /** Type ids shown on the home Rhythm card, in order (present = shown). */
+  rhythmOrder: string[];
 }
 
 const KEY = 'babyapp:settings';
@@ -41,6 +43,7 @@ function fallback(): SettingsData {
     customTypes: [],
     logOrder: [...BUILTIN_EVENT_TYPES],
     hiddenTypes: [],
+    rhythmOrder: ['feed', 'sleep', 'diaper'],
   };
 }
 
@@ -58,6 +61,9 @@ function load(): SettingsData {
         : [],
       logOrder: Array.isArray(p.logOrder) ? p.logOrder.filter((x) => typeof x === 'string') : [],
       hiddenTypes: Array.isArray(p.hiddenTypes) ? p.hiddenTypes.filter((x) => typeof x === 'string') : [],
+      rhythmOrder: Array.isArray(p.rhythmOrder)
+        ? p.rhythmOrder.filter((x) => typeof x === 'string')
+        : ['feed', 'sleep', 'diaper'],
     };
     // Keep the order list consistent with what actually exists
     // (new built-ins appended, deleted customs dropped).
@@ -66,6 +72,8 @@ function load(): SettingsData {
     for (const id of ids) if (!order.includes(id)) order.push(id);
     data.logOrder = order;
     data.hiddenTypes = data.hiddenTypes.filter((id) => ids.includes(id));
+    // Rhythm is user-curated: drop deleted types, but don't re-add anything.
+    data.rhythmOrder = data.rhythmOrder.filter((id) => ids.includes(id));
     return data;
   } catch {
     return base;
@@ -82,6 +90,7 @@ function persist(s: SettingsState) {
         customTypes: s.customTypes,
         logOrder: s.logOrder,
         hiddenTypes: s.hiddenTypes,
+        rhythmOrder: s.rhythmOrder,
       }),
     );
   } catch {
@@ -96,6 +105,9 @@ interface SettingsState extends SettingsData {
   removeCustomType: (id: string) => void;
   moveLogType: (id: string, dir: -1 | 1) => void;
   toggleHiddenType: (id: string) => void;
+  addRhythmEntry: (id: string) => void;
+  removeRhythmEntry: (id: string) => void;
+  moveRhythmEntry: (id: string, dir: -1 | 1) => void;
 }
 
 export const useSettings = create<SettingsState>()((set, get) => {
@@ -124,7 +136,23 @@ export const useSettings = create<SettingsState>()((set, get) => {
         customTypes: get().customTypes.filter((c) => c.id !== id),
         logOrder: get().logOrder.filter((x) => x !== id),
         hiddenTypes: get().hiddenTypes.filter((x) => x !== id),
+        rhythmOrder: get().rhythmOrder.filter((x) => x !== id),
       });
+    },
+    addRhythmEntry: (id) => {
+      if (get().rhythmOrder.includes(id)) return;
+      commit({ rhythmOrder: [...get().rhythmOrder, id] });
+    },
+    removeRhythmEntry: (id) => {
+      commit({ rhythmOrder: get().rhythmOrder.filter((x) => x !== id) });
+    },
+    moveRhythmEntry: (id, dir) => {
+      const order = [...get().rhythmOrder];
+      const i = order.indexOf(id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= order.length) return;
+      [order[i], order[j]] = [order[j], order[i]];
+      commit({ rhythmOrder: order });
     },
     moveLogType: (id, dir) => {
       const order = [...get().logOrder];
