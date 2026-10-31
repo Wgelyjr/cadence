@@ -27,6 +27,7 @@ import type { Child, EventType } from '../lib/types';
 import { BUILTIN_EVENT_TYPES, EVENT_TYPE_META } from '../lib/types';
 import { ageLabel, exportCSV, exportJSON } from '../lib/utils';
 import { PALETTE } from '../components/AddChildForm';
+import { CUSTOM_TYPE_ICON_NAMES, CustomTypeIcon } from '../components/CustomTypeIcon';
 import { initials } from '../components/ChildSwitcher';
 
 // ---------------------------------------------------------------------------
@@ -90,7 +91,7 @@ function SignInModal({ open, onClose }: { open: boolean; onClose: () => void }) 
           {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
         </button>
         <p className="text-center text-xs text-slate-400 dark:text-slate-500">
-          Signing in lets BabyApp sync across your devices and caregivers.
+          Signing in lets Cadence sync across your devices and caregivers.
         </p>
       </form>
     </Modal>
@@ -241,6 +242,29 @@ function PreferencesCard() {
 // Custom event types
 // ---------------------------------------------------------------------------
 
+function IconPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="grid grid-cols-8 gap-1">
+      {CUSTOM_TYPE_ICON_NAMES.map((name) => (
+        <button
+          key={name}
+          type="button"
+          onClick={() => onChange(name)}
+          aria-label={`Icon ${name}`}
+          aria-pressed={value === name}
+          className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
+            value === name
+              ? 'bg-brand-600 text-white'
+              : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700/60'
+          }`}
+        >
+          <CustomTypeIcon icon={name} size={14} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function CustomEventsCard() {
   const customTypes = useSettings((s) => s.customTypes);
   const addCustomType = useSettings((s) => s.addCustomType);
@@ -248,9 +272,11 @@ function CustomEventsCard() {
   const updateCustomType = useSettings((s) => s.updateCustomType);
   const [label, setLabel] = useState('');
   const [color, setColor] = useState(PALETTE[0]);
+  const [icon, setIcon] = useState('star');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editColor, setEditColor] = useState(PALETTE[0]);
+  const [editIcon, setEditIcon] = useState('star');
 
   return (
     <Card title="Custom events" icon={<Plus size={16} />}>
@@ -263,7 +289,7 @@ function CustomEventsCard() {
         onSubmit={(e) => {
           e.preventDefault();
           if (!label.trim()) return;
-          addCustomType(label, color);
+          addCustomType(label, color, icon);
           setLabel('');
         }}
       >
@@ -293,6 +319,7 @@ function CustomEventsCard() {
             />
           ))}
         </div>
+        <IconPicker value={icon} onChange={setIcon} />
       </form>
 
       {customTypes.length > 0 && (
@@ -308,6 +335,7 @@ function CustomEventsCard() {
                   autoFocus
                   aria-label={`Rename ${t.label}`}
                 />
+                <IconPicker value={editIcon} onChange={setEditIcon} />
                 <div className="flex items-center gap-1.5">
                   {PALETTE.map((c) => (
                     <button
@@ -327,7 +355,7 @@ function CustomEventsCard() {
                     className="btn-primary px-3 py-1.5 text-xs"
                     disabled={!editLabel.trim()}
                     onClick={() => {
-                      updateCustomType(t.id, editLabel, editColor);
+                      updateCustomType(t.id, editLabel, editColor, editIcon);
                       setEditingId(null);
                     }}
                   >
@@ -344,7 +372,13 @@ function CustomEventsCard() {
               </div>
             ) : (
               <div key={t.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-                <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: t.color }} />
+                <span
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white"
+                  style={{ background: t.color }}
+                  aria-hidden
+                >
+                  <CustomTypeIcon icon={t.icon} size={11} />
+                </span>
                 <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
                   {t.label}
                 </span>
@@ -354,6 +388,7 @@ function CustomEventsCard() {
                     setEditingId(t.id);
                     setEditLabel(t.label);
                     setEditColor(t.color);
+                    setEditIcon(t.icon ?? 'star');
                   }}
                   aria-label={`Edit ${t.label}`}
                 >
@@ -765,7 +800,7 @@ export default function Settings() {
       <DataCard />
       <Card title="About" icon={<Cloud size={16} />}>
         <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-          BabyApp is a care tracker — it records and organizes your baby's care. It is not a
+          Cadence is a care tracker — it records and organizes your baby's care. It is not a
           medical device and does not provide medical advice. For anything health-related,
           talk to your own doctor or a healthcare professional.
         </p>

@@ -20,6 +20,8 @@ export interface CustomEventType {
   id: string;
   label: string;
   color: string;
+  /** Icon name from CUSTOM_TYPE_ICONS; absent on types made before icons existed (renders as a star). */
+  icon?: string;
 }
 
 interface SettingsData {
@@ -57,7 +59,14 @@ function load(): SettingsData {
       units: p.units === 'imperial' ? 'imperial' : 'metric',
       theme: p.theme === 'light' || p.theme === 'dark' || p.theme === 'system' ? p.theme : 'system',
       customTypes: Array.isArray(p.customTypes)
-        ? p.customTypes.filter((c) => c && typeof c.id === 'string' && typeof c.label === 'string')
+        ? p.customTypes
+            .filter((c) => c && typeof c.id === 'string' && typeof c.label === 'string')
+            .map((c) => ({
+              id: c.id,
+              label: c.label,
+              color: c.color,
+              icon: typeof c.icon === 'string' ? c.icon : undefined,
+            }))
         : [],
       logOrder: Array.isArray(p.logOrder) ? p.logOrder.filter((x) => typeof x === 'string') : [],
       hiddenTypes: Array.isArray(p.hiddenTypes) ? p.hiddenTypes.filter((x) => typeof x === 'string') : [],
@@ -101,11 +110,11 @@ function persist(s: SettingsState) {
 interface SettingsState extends SettingsData {
   setUnits: (u: Units) => void;
   setTheme: (t: Theme) => void;
-  addCustomType: (label: string, color: string) => void;
+  addCustomType: (label: string, color: string, icon?: string) => void;
   removeCustomType: (id: string) => void;
-  /** Rename / recolor a custom type. Only affects future entries — logged
-      events keep their denormalized label. */
-  updateCustomType: (id: string, label: string, color: string) => void;
+  /** Rename / recolor / re-icon a custom type. Only affects future entries —
+      logged events keep their denormalized label. */
+  updateCustomType: (id: string, label: string, color: string, icon: string) => void;
   moveLogType: (id: string, dir: -1 | 1) => void;
   toggleHiddenType: (id: string) => void;
   addRhythmEntry: (id: string) => void;
@@ -127,8 +136,8 @@ export const useSettings = create<SettingsState>()((set, get) => {
       commit({ theme });
       applyTheme(theme);
     },
-    addCustomType: (label, color) => {
-      const t: CustomEventType = { id: uid(), label: label.trim(), color };
+    addCustomType: (label, color, icon) => {
+      const t: CustomEventType = { id: uid(), label: label.trim(), color, icon };
       commit({
         customTypes: [...get().customTypes, t],
         logOrder: [...get().logOrder, t.id],
@@ -142,12 +151,12 @@ export const useSettings = create<SettingsState>()((set, get) => {
         rhythmOrder: get().rhythmOrder.filter((x) => x !== id),
       });
     },
-    updateCustomType: (id, label, color) => {
+    updateCustomType: (id, label, color, icon) => {
       const trimmed = label.trim();
       if (!trimmed) return;
       commit({
         customTypes: get().customTypes.map((c) =>
-          c.id === id ? { ...c, label: trimmed, color } : c,
+          c.id === id ? { ...c, label: trimmed, color, icon } : c,
         ),
       });
     },

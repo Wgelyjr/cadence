@@ -19,6 +19,7 @@ import {
   type RhythmItem,
 } from '../lib/rhythm';
 import type { BuiltinEventType } from '../lib/types';
+import { CustomTypeIcon } from './CustomTypeIcon';
 
 const NEUTRAL = {
   box: 'bg-slate-100 dark:bg-slate-800',
@@ -62,15 +63,16 @@ const BUILTIN_META: Record<
 interface RowMeta {
   label: string;
   Icon: typeof Moon | null;
-  /** Custom types show their color as a dot instead of an icon. */
-  dotColor: string | null;
+  /** Custom types show a colored circle with their icon instead of a glyph. */
+  customIcon?: string;
+  customColor?: string;
   box: string;
   icon: string;
   bar: string;
 }
 
 function Row({ item, meta }: { item: RhythmItem; meta: RowMeta }) {
-  const { Icon, dotColor } = meta;
+  const { Icon, customIcon, customColor } = meta;
 
   let ago: string;
   if (item.asleep) ago = `Asleep · ${elapsedLabel(item.elapsedMin ?? 0)}`;
@@ -93,12 +95,14 @@ function Row({ item, meta }: { item: RhythmItem; meta: RowMeta }) {
       <span
         className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${meta.box}`}
       >
-        {dotColor ? (
+        {customColor ? (
           <span
-            className="h-4 w-4 rounded-full"
-            style={{ background: dotColor }}
+            className="flex h-4 w-4 items-center justify-center rounded-full text-white"
+            style={{ background: customColor }}
             aria-hidden
-          />
+          >
+            <CustomTypeIcon icon={customIcon} size={10} />
+          </span>
         ) : (
           Icon && <Icon size={16} className={meta.icon} />
         )}
@@ -135,13 +139,14 @@ export default function RhythmCard() {
       return {
         label: custom.label,
         Icon: null,
-        dotColor: custom.color,
+        customIcon: custom.icon,
+        customColor: custom.color,
         box: 'bg-slate-100 dark:bg-slate-800',
         icon: '',
         bar: NEUTRAL.bar,
       };
     const m = BUILTIN_META[item.key as BuiltinEventType] ?? BUILTIN_META.growth;
-    return { label: m.label, Icon: m.Icon, dotColor: null, box: m.box, icon: m.icon, bar: m.bar };
+    return { label: m.label, Icon: m.Icon, box: m.box, icon: m.icon, bar: m.bar };
   };
 
   const rhythm: Rhythm = computeRhythm(child, events, rhythmOrder);

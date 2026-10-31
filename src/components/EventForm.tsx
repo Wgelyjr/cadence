@@ -35,6 +35,7 @@ import {
 import type { Units } from '../lib/settings';
 import { loadLastEntry, saveLastEntry } from '../lib/lastEntry';
 import Seg from './Seg';
+import { CustomTypeIcon } from './CustomTypeIcon';
 
 const ICONS: Record<BuiltinEventType, typeof Moon> = {
   sleep: Moon,
@@ -249,6 +250,16 @@ export default function EventForm({ initial, onSaved }: Props) {
   }, [timerStart]);
 
   const elapsed = timerStart != null ? Math.max(0, Math.floor((Date.now() - timerStart) / 1000)) : 0;
+  // When the timer isn't running but start/end are set (e.g. a feed that was
+  // stopped, or an edit of a timed event), show the recorded duration instead
+  // of a dead 0:00.
+  const recordedSec =
+    timerStart == null && form.start_time && form.end_time
+      ? Math.max(
+          0,
+          Math.round((new Date(form.end_time).getTime() - new Date(form.start_time).getTime()) / 1000),
+        )
+      : null;
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
@@ -315,7 +326,9 @@ export default function EventForm({ initial, onSaved }: Props) {
         child_id: childId,
         start_time: fromLocalInput(form.start_time || toLocalInput(new Date())),
       };
-      if (form.end_time) input.end_time = fromLocalInput(form.end_time);
+      // Only sleep (manual/timer) and feed (timer) carry an end time.
+      if (form.end_time && (selected === 'sleep' || selected === 'feed'))
+        input.end_time = fromLocalInput(form.end_time);
 
       switch (selected) {
         case 'sleep':
@@ -389,7 +402,10 @@ export default function EventForm({ initial, onSaved }: Props) {
         const updated = { ...initial };
         for (const keys of Object.values(TYPE_FIELDS))
           for (const k of keys) delete (updated as Record<string, unknown>)[k];
-        if (!form.end_time && input.type !== 'contraction') delete updated.end_time;
+        // End times are only valid on sleep/feed; dropping them when the type
+        // no longer uses one (or the field was cleared) avoids stale values.
+        if ((input.type !== 'sleep' && input.type !== 'feed') || !form.end_time)
+          delete updated.end_time;
         if (!form.note) delete updated.note;
         Object.assign(updated, input);
         await updateEvent(updated);
@@ -435,10 +451,12 @@ export default function EventForm({ initial, onSaved }: Props) {
                 <Icon size={20} />
               ) : (
                 <span
-                  className="h-5 w-5 rounded-full ring-2 ring-white dark:ring-slate-900"
+                  className="flex h-5 w-5 items-center justify-center rounded-full text-white ring-2 ring-white dark:ring-slate-900"
                   style={{ background: custom!.color }}
                   aria-hidden
-                />
+                >
+                  <CustomTypeIcon icon={custom!.icon} size={11} />
+                </span>
               )}
               <span className="max-w-full truncate">
                 {custom ? custom.label : EVENT_TYPE_META[id as EventType].label}
@@ -460,7 +478,11 @@ export default function EventForm({ initial, onSaved }: Props) {
                 timerStart ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400 dark:text-slate-500'
               }`}
             >
-              {fmtElapsed(elapsed)}
+              {timerStart != null
+                ? fmtElapsed(elapsed)
+                : recordedSec != null
+                  ? fmtElapsed(recordedSec)
+                  : '0:00'}
             </p>
           </div>
           {timerStart == null ? (
@@ -494,7 +516,7 @@ export default function EventForm({ initial, onSaved }: Props) {
             />
           </div>
         </div>
-        {selected !== 'contraction' && (
+        {selected === 'sleep' && (
           <div>
             <label className="label">End</label>
             <div className="grid grid-cols-2 gap-3">
@@ -802,7 +824,7 @@ export default function EventForm({ initial, onSaved }: Props) {
 
       {selectedCustom && (
         <p className="text-xs text-slate-400 dark:text-slate-500">
-          {selectedCustom.label} — custom entry. Add times and a note.
+          {selectedCustom.label} — custom entry. Add a start time and a note.
         </p>
       )}
 
