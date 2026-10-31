@@ -103,6 +103,9 @@ interface SettingsState extends SettingsData {
   setTheme: (t: Theme) => void;
   addCustomType: (label: string, color: string) => void;
   removeCustomType: (id: string) => void;
+  /** Rename / recolor a custom type. Only affects future entries — logged
+      events keep their denormalized label. */
+  updateCustomType: (id: string, label: string, color: string) => void;
   moveLogType: (id: string, dir: -1 | 1) => void;
   toggleHiddenType: (id: string) => void;
   addRhythmEntry: (id: string) => void;
@@ -137,6 +140,15 @@ export const useSettings = create<SettingsState>()((set, get) => {
         logOrder: get().logOrder.filter((x) => x !== id),
         hiddenTypes: get().hiddenTypes.filter((x) => x !== id),
         rhythmOrder: get().rhythmOrder.filter((x) => x !== id),
+      });
+    },
+    updateCustomType: (id, label, color) => {
+      const trimmed = label.trim();
+      if (!trimmed) return;
+      commit({
+        customTypes: get().customTypes.map((c) =>
+          c.id === id ? { ...c, label: trimmed, color } : c,
+        ),
       });
     },
     addRhythmEntry: (id) => {

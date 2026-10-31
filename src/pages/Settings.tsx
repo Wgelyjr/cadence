@@ -245,8 +245,12 @@ function CustomEventsCard() {
   const customTypes = useSettings((s) => s.customTypes);
   const addCustomType = useSettings((s) => s.addCustomType);
   const removeCustomType = useSettings((s) => s.removeCustomType);
+  const updateCustomType = useSettings((s) => s.updateCustomType);
   const [label, setLabel] = useState('');
   const [color, setColor] = useState(PALETTE[0]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editColor, setEditColor] = useState(PALETTE[0]);
 
   return (
     <Card title="Custom events" icon={<Plus size={16} />}>
@@ -293,23 +297,80 @@ function CustomEventsCard() {
 
       {customTypes.length > 0 && (
         <div className="mt-3 space-y-1">
-          {customTypes.map((t) => (
-            <div key={t.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: t.color }} />
-              <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
-                {t.label}
-              </span>
-              <button
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/60 dark:hover:text-red-400"
-                onClick={() => removeCustomType(t.id)}
-                aria-label={`Delete ${t.label}`}
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
+          {customTypes.map((t) =>
+            editingId === t.id ? (
+              <div key={t.id} className="space-y-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/60">
+                <input
+                  className="field"
+                  value={editLabel}
+                  onChange={(e) => setEditLabel(e.target.value)}
+                  maxLength={24}
+                  autoFocus
+                  aria-label={`Rename ${t.label}`}
+                />
+                <div className="flex items-center gap-1.5">
+                  {PALETTE.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setEditColor(c)}
+                      className={`h-5 w-5 rounded-full transition ${
+                        editColor === c ? 'ring-2 ring-brand-500 ring-offset-1 dark:ring-offset-slate-900' : ''
+                      }`}
+                      style={{ background: c }}
+                      aria-label={`Color ${c}`}
+                    />
+                  ))}
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    className="btn-primary px-3 py-1.5 text-xs"
+                    disabled={!editLabel.trim()}
+                    onClick={() => {
+                      updateCustomType(t.id, editLabel, editColor);
+                      setEditingId(null);
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-200/60 dark:text-slate-400 dark:hover:bg-slate-700/60"
+                    onClick={() => setEditingId(null)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div key={t.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: t.color }} />
+                <span className="flex-1 truncate text-sm text-slate-700 dark:text-slate-200">
+                  {t.label}
+                </span>
+                <button
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                  onClick={() => {
+                    setEditingId(t.id);
+                    setEditLabel(t.label);
+                    setEditColor(t.color);
+                  }}
+                  aria-label={`Edit ${t.label}`}
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/60 dark:hover:text-red-400"
+                  onClick={() => removeCustomType(t.id)}
+                  aria-label={`Delete ${t.label}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ),
+          )}
           <p className="px-2 pt-1 text-[11px] text-slate-400 dark:text-slate-500">
-            Deleting a type keeps its logged entries.
+            Renaming a type only affects new entries; deleting keeps its logged entries.
           </p>
         </div>
       )}
