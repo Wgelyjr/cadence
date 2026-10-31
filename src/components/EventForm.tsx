@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Apple,
   AlertTriangle,
@@ -237,6 +237,10 @@ export default function EventForm({ initial, onSaved }: Props) {
   const [busy, setBusy] = useState(false);
   const [timerStart, setTimerStart] = useState<number | null>(null);
   const [, setTick] = useState(0);
+  // Synchronous double-submit guard. `busy` is state, so clicks that land
+  // before the re-render all see the stale `busy === false`; the ref is
+  // updated immediately, so a save already in flight blocks the next one.
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (timerStart == null) return;
@@ -297,7 +301,8 @@ export default function EventForm({ initial, onSaved }: Props) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!childId || busy) return;
+    if (!childId || busy || savingRef.current) return;
+    savingRef.current = true;
     setBusy(true);
     try {
       // A custom event whose type was later removed from settings keeps its
@@ -399,6 +404,7 @@ export default function EventForm({ initial, onSaved }: Props) {
       setTimerStart(null);
       onSaved?.();
     } finally {
+      savingRef.current = false;
       setBusy(false);
     }
   }
