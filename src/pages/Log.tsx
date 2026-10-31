@@ -1,6 +1,8 @@
 import EventForm from '../components/EventForm';
+import { useAppStore } from '../lib/store';
 
 export default function Log() {
+  const activeChildId = useAppStore((s) => s.activeChildId);
   return (
     <div className="animate-fade-in space-y-4">
       <div>
@@ -9,7 +11,9 @@ export default function Log() {
           Pick a type, use the timer or set times, then save.
         </p>
       </div>
-      <EventForm />
+      {/* Keyed by child so the form re-opens for that child's last entry
+          when the active child changes. */}
+      <EventForm key={activeChildId} />
     </div>
   );
 }

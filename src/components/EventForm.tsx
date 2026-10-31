@@ -33,6 +33,7 @@ import {
   weightUnit,
 } from '../lib/units';
 import type { Units } from '../lib/settings';
+import { loadLastEntry, saveLastEntry } from '../lib/lastEntry';
 import Seg from './Seg';
 
 const ICONS: Record<BuiltinEventType, typeof Moon> = {
@@ -139,7 +140,8 @@ function formFromEvent(e: CareEvent, units: Units): FormState {
   const len = (cm: number) => (units === 'metric' ? cm : round1(cm / CM_PER_IN));
   const wgt = (kg: number) => (units === 'metric' ? kg : round1(kg / KG_PER_LB));
   const tmp = (c: number) => (units === 'metric' ? c : round1(c * (9 / 5) + 32));
-  f.start_time = toLocalInput(new Date(e.start_time));
+  // A prefill source (lastEntry) has no times; fall back to now.
+  f.start_time = e.start_time ? toLocalInput(new Date(e.start_time)) : toLocalInput(new Date());
   f.end_time = e.end_time ? toLocalInput(new Date(e.end_time)) : '';
   if (e.sleep_kind) f.sleep_kind = e.sleep_kind;
   if (e.feed_method) f.feed_method = e.feed_method;
@@ -163,6 +165,19 @@ function formFromEvent(e: CareEvent, units: Units): FormState {
   if (e.contraction_duration_sec != null)
     f.contraction_duration_sec = String(e.contraction_duration_sec);
   if (e.note) f.note = e.note;
+  return f;
+}
+
+/**
+ * Form pre-populated from a previously saved entry: the type's details
+ * carry over (re-rendered in the current display units), while times reset
+ * to now and end/note stay blank for the new entry.
+ */
+function prefillFrom(e: CareEvent, units: Units): FormState {
+  const f = formFromEvent(e, units);
+  f.start_time = toLocalInput(new Date());
+  f.end_time = '';
+  f.note = '';
   return f;
 }
 
@@ -193,15 +208,31 @@ export default function EventForm({ initial, onSaved }: Props) {
     [customTypes],
   );
 
+  // For a new entry, open with the child's last-logged type pre-populated
+  // (details in display units, fresh "now" start) when that type is still
+  // in the picker — e.g. another bottle of the same volume.
+  const last = useMemo(
+    () => (initial || !childId ? null : loadLastEntry(childId)),
+    [initial, childId],
+  );
+  const lastId = last
+    ? last.type === 'custom'
+      ? last.custom_type_id ?? ''
+      : last.type
+    : null;
+  const lastUsable = last && lastId ? pickerIds.includes(lastId) : false;
+
   const [selected, setSelected] = useState<string>(() =>
     initial
       ? initial.type === 'custom'
         ? initial.custom_type_id ?? ''
         : initial.type
-      : pickerIds[0] ?? 'sleep',
+      : lastUsable
+        ? (lastId as string)
+        : pickerIds[0] ?? 'sleep',
   );
   const [form, setForm] = useState<FormState>(() =>
-    initial ? formFromEvent(initial, units) : defaultForm(),
+    initial ? formFromEvent(initial, units) : lastUsable ? prefillFrom(last!, units) : defaultForm(),
   );
   const [busy, setBusy] = useState(false);
   const [timerStart, setTimerStart] = useState<number | null>(null);
@@ -357,10 +388,14 @@ export default function EventForm({ initial, onSaved }: Props) {
         if (!form.note) delete updated.note;
         Object.assign(updated, input);
         await updateEvent(updated);
+        setForm(defaultForm());
       } else {
         await addEvent(input);
+        // Remember this entry (canonical units) so the next log opens
+        // pre-populated for rapid re-logging.
+        saveLastEntry(childId, input as CareEvent);
+        setForm(prefillFrom(input as CareEvent, units));
       }
-      setForm(defaultForm());
       setTimerStart(null);
       onSaved?.();
     } finally {
