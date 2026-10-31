@@ -43,6 +43,10 @@ interface AppState {
   ) => Promise<CareEvent>;
   updateEvent: (evt: CareEvent) => Promise<void>;
   removeEvent: (id: string) => Promise<void>;
+  importEvents: (
+    childId: string,
+    partials: Array<Partial<CareEvent>>,
+  ) => Promise<{ added: number; skipped: number }>;
 
   deleteAccount: () => Promise<void>;
   sync: () => Promise<void>;
@@ -187,6 +191,48 @@ export const useAppStore = create<AppState>()((set, get) => {
       await db.dbPutEvent(soft);
       set((s) => ({ events: s.events.map((e) => (e.id === id ? soft : e)) }));
       scheduleSync();
+    },
+
+    importEvents: async (childId, partials) => {
+      const child = get().children.find((c) => c.id === childId && !c.deleted);
+      if (!child) return { added: 0, skipped: 0 };
+
+      // Dedupe against what this child already has (and within the file
+      // itself), so re-importing the same export is a no-op.
+      const key = (e: Partial<CareEvent>) =>
+        `${e.type}|${e.start_time}|${e.end_time ?? ''}`;
+      const seen = new Set(
+        get()
+          .events.filter((e) => e.child_id === childId && !e.deleted)
+          .map(key),
+      );
+
+      const now = nowIso();
+      const fresh: CareEvent[] = [];
+      let skipped = 0;
+      for (const p of partials) {
+        if (!p.type || !p.start_time) continue;
+        if (seen.has(key(p))) {
+          skipped++;
+          continue;
+        }
+        seen.add(key(p));
+        fresh.push({
+          id: uid(),
+          child_id: childId,
+          care_group_id: child.care_group_id,
+          created_at: now,
+          updated_at: now,
+          ...p,
+        } as CareEvent);
+      }
+
+      if (fresh.length) {
+        await db.dbPutEvents(fresh);
+        set((s) => ({ events: [...fresh, ...s.events] }));
+      }
+      if (fresh.length || skipped) scheduleSync();
+      return { added: fresh.length, skipped };
     },
 
     deleteAccount: async () => {

@@ -13,7 +13,9 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Upload,
 } from 'lucide-react';
+import ImportModal from '../components/ImportModal';
 import Modal from '../components/Modal';
 import { isSupabaseConfigured } from '../lib/config';
 import { getSupabase } from '../lib/supabase';
@@ -516,6 +518,7 @@ function DataCard() {
   const activeId = useAppStore((s) => s.activeChildId);
   const deleteAccount = useAppStore((s) => s.deleteAccount);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const child = children.find((c) => c.id === activeId && !c.deleted);
   if (!child) return null;
@@ -538,10 +541,14 @@ function DataCard() {
             <Download size={15} /> Export CSV
           </button>
         </div>
+        <button className="btn-ghost w-full" onClick={() => setImporting(true)}>
+          <Upload size={15} /> Import from Huckleberry
+        </button>
         <button className="btn-danger w-full" onClick={() => setConfirmDelete(true)}>
           <Trash2 size={15} /> Delete all my data
         </button>
       </div>
+      <ImportModal open={importing} onClose={() => setImporting(false)} />
 
       <Modal open={confirmDelete} title="Delete all data" onClose={() => setConfirmDelete(false)}>
         <p className="text-sm text-slate-600 dark:text-slate-300">

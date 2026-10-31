@@ -109,6 +109,15 @@ export async function dbPutEvent(evt: CareEvent): Promise<void> {
   await db.put('events', evt);
 }
 
+/** Bulk variant of dbPutEvent — all rows land in a single transaction. */
+export async function dbPutEvents(events: CareEvent[]): Promise<void> {
+  if (!events.length) return;
+  const db = await getDB();
+  const tx = db.transaction('events', 'readwrite');
+  for (const e of events) tx.store.put(e);
+  await tx.done;
+}
+
 export async function dbDeleteChild(id: string): Promise<void> {
   const db = await getDB();
   await db.delete('children', id);
